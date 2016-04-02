@@ -1,6 +1,7 @@
 import os
 import json
-
+import shutil
+import errno
 
 def ensure_path(path):
 	"""
@@ -29,4 +30,30 @@ def load_json(fname, fdir='.'):
 	NOTE: Reads from text file, not binary.
 	"""
 	with open(os.path.join(fdir, fname), 'r') as f:
-		return json.load(f)	
+		return json.load(f)
+
+
+def copy_dir(src, dst):
+	"""
+	Attempt to copy directory, on failure copy file. Will overwrite
+	any files in dst.
+	"""
+	# Remove destination directory if already exists
+	if os.path.exists(dst):
+		shutil.rmtree(dst)
+	# Copy directory over
+	try:
+		shutil.copytree(src, dst)
+	except OSError as exc:
+		if exc.errno == errno.ENOTDIR:
+			shutil.copy(src, dst)
+		else:
+			raise Exception()
+
+
+def grab_scraper_data(src=os.path.join("..","BarrelRollCFBData","data"),
+					  dst=os.path.join("data")):
+	"""
+	Copy in data directory from BarrelRollCFBData
+	"""
+	copy_dir(src, dst)

@@ -1,9 +1,16 @@
 import os
 import re
-from src.IOutils import load_json, dump_json
+from src.IOutils import load_json, dump_json, grab_scraper_data
 
 
-def compile_teams(years='all'):
+def compile_teams(years='all', refresh_data=False):
+	"""
+	Compiles teams from inputted year range into dictionaries.
+	'refresh_data' will delete the current data and reload it
+	from BarrelRollCFB.
+	"""
+	if refresh_data:
+		grab_scraper_data()
 	teams = {}
 	game_index = load_json(os.path.join('data', 'game_index.json'))
 	teamgame_index = load_json(os.path.join('data', 'teamgame_index.json'))
