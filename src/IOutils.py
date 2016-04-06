@@ -51,8 +51,8 @@ def copy_dir(src, dst):
 			raise Exception()
 
 
-def grab_scraper_data(src=os.path.join("..","BarrelRollCFBData","data"),
-					  dst=os.path.join("data")):
+def grab_scraper_data(src=os.path.join('..','BarrelRollCFBData','data'),
+					  dst=os.path.join('data')):
 	"""
 	Copy in data directory from BarrelRollCFBData
 	"""
