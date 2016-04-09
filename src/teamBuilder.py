@@ -32,15 +32,12 @@ def compile_fields():
 	unique_box_keys = list(set(box_keys))
 	unique_game_keys = list(set(game_keys))
 	# Manual unwanted key removal
-	try:
-		unique_game_keys.remove('Links')
-	except ValueError: pass
-	try:
-		unique_game_keys.remove('AwayTeamInfo')
-	except ValueError: pass
-	try:
-		unique_game_keys.remove('HomeTeamInfo')
-	except ValueError: pass
+	unwanted_fields = ['Links', 'AwayTeamInfo', 'HomeTeamInfo', 'GameState']
+	for field in unwanted_fields:
+		try:
+			unique_game_keys.remove(field)
+		except ValueError:
+			pass
 	# write boxscore
 	with open(os.path.join('data', 'boxscore_fields.csv'), 'wb') as f:
 		writer = csv.writer(f)
@@ -73,76 +70,124 @@ def get_fields():
 
 
 def team_is_home(team_id, gameinfo):
+	try:
+		assert(int(team_id) == int(gameinfo['HomeTeamId']) or
+			   int(team_id) == int(gameinfo['AwayTeamId']))
+	except:
+		import pdb
+		pdb.set_trace()
 	return int(team_id) == int(gameinfo['HomeTeamId'])
 
 
-def team_boxscore_to_array(team):
+def build_team_DataFrames():
+	"""
+	Builds pandas DataFrame for each team and saves as pickle file
+	"""
+	comp_team_dir = os.path.join('data', 'compiled_team_data')
+	teams = load_json('all.json', fdir=comp_team_dir)
+	data_frames = []
+	for tid, team in teams.iteritems():
+		box_arr = team_boxscore_to_array(team, tid)
+		fname = tid +'_DataFrame.df'
+		box_arr.to_pickle(os.path.join(comp_team_dir, fname))
+		data_frames.append(box_arr)
+	all_df = pd.concat(data_frames)
+	all_df.to_pickle(os.path.join(comp_team_dir, 'all.df'))
+
+
+def team_boxscore_to_array(team, team_id):
 	"""
 	Converts all games in json format to a pandas array
 	"""
 	box_keys_unq, game_keys_unq = get_fields()
-	box_keys_unq.sort()
 	game_keys_unq.sort()
-	box_keys = []
+	box_keys_unq.sort()
 	game_keys = []
+	box_keys = []
 	# append game information
 	for key in game_keys_unq:
-		# replace instances of 'home' and 'away' with 'off' and 'def'
+		# replace instances of 'home' and 'away' with 'this_' and 'other_'
 		new_key = key
-		new_key = re.sub("home", "off", new_key, flags=re.I)
-		new_key = re.sub("away", "def", new_key, flags=re.I)
+		new_key = re.sub("home", "this_", new_key, flags=re.I)
+		new_key = re.sub("away", "other_", new_key, flags=re.I)
 		game_keys.append(new_key)
 	# append team stats keys
 	for i in range(0,2):
-		pos = 'off' if i == 0 else 'def'
+		pos = 'this_' if i == 0 else 'other_'
 		for key in box_keys_unq:
-			box_keys.append(pos+' '+key)
+			box_keys.append(pos+key)
 	# loop through all games
 	for year, games in team['games'].iteritems():
 		box_array = pd.DataFrame(columns=game_keys + box_keys)
+		this_conf = team['teamInfo'][year]['ConferenceId']
 		for gid, game in games.iteritems():
 			box_dict = {}
+			# decide how to access boxscore data
 			is_home = team_is_home(team_id, game['gameinfo'])
-			# Game info data
-			home_repl = 'off' if is_home else 'def'
-			away_repl = 'def' if is_home else 'off'
-			# load gameinfo
+			box_dict['is_home'] = 1 if is_home else 0
+			this_box_field = 'homeTeam' if is_home else 'awayTeam'
+			other_box_field = 'awayTeam' if is_home else 'homeTeam'
+			this_game_field = 'Home' if is_home else 'Away'
+			other_game_field = 'Away' if is_home else 'Home'
+			# set conferences
 			try:
-				ginfo = game['gameinfo']
+				other_id_field = 'AwayTeamId' if is_home else 'HomeTeamId'
+				other_id = game['gameinfo'][other_id_field]
+				other_team = load_team(other_id)
+				other_conf = other_team['teamInfo'][year]['ConferenceId']
+				box_dict['other_conferenceId'] = other_conf
 			except KeyError:
-				UserWarning("Bad gameinfo field found in game %s" % gid)
-				continue
-			# add game information
-			for key, val in ginfo.iteritems():
-				if re.search("^links|(Home|Away)teaminfo", key, flags=re.I):
+				box_dict['other_conferenceId'] = '-1'
+			box_dict['this_conferenceId'] = this_conf
+			# loop through all fields
+			struct_fields = ['gameinfo', 'boxscore']
+			key_fields = [game_keys, box_keys]
+			for i, data_field in enumerate(struct_fields):
+				is_ginfo = data_field == 'gameinfo'
+				# load data
+				try:
+					data = game[data_field]
+				except KeyError:
+					UserWarning("Bad %s field found in game %s" % (data_field, gid))
 					continue
-				new_key = key
-				new_key = re.sub("home", home_repl, new_key, flags=re.I)
-				new_key = re.sub("away", away_repl, new_key, flags=re.I)
-				assert(new_key in game_keys)
-				box_dict[new_key] = val
-			# Boxscore data
-			off_field = 'homeTeam' if is_home else 'awayTeam'
-			def_field = 'awayTeam' if is_home else 'homeTeam'
-			# load boxscore
-			try:
-				box = game['boxscore']
-			except KeyError:
-				UserWarning("Bad boxscore field found in game %s" % gid)
-				continue
-			# add boxscore stats
-			for i in range(0,2):
-				pos = 'off' if i == 0 else 'def'
-				field = off_field if i == 0 else def_field
-				for j, key in enumerate(box_keys_unq):
-					bk_idx = i * len(box_keys_unq) + j
+				# add to array
+				keys = key_fields[i]
+				for key in keys:
+					this_repl = this_game_field if is_ginfo else ''
+					other_repl = other_game_field if is_ginfo else ''
+					# determine if home/away field is this team
+					if re.match("this_", key) is not None:
+						data_key = re.sub("this_", this_repl, key)
+						try:
+							tmp_data = data if is_ginfo else data[this_box_field]
+						except KeyError:
+							UserWarning("Bad %s field found in game %s" % (data_field, gid))
+							continue
+					elif re.match("other_", key) is not None:
+						data_key = re.sub("other_", other_repl, key)
+						try:
+							tmp_data = data if is_ginfo else data[other_box_field]
+						except KeyError:
+							UserWarning("Bad %s field found in game %s" % (data_field, gid))
+							continue
+					else:
+						data_key = key
+						tmp_data = data
+					# set data
 					try:
-						box_dict[box_keys[bk_idx]] = box[field][key]
+						box_dict[key] = tmp_data[data_key]
 					except KeyError:
-						box_dict[box_keys[bk_idx]] = "-"
+						box_dict[key] = '-'
 			# Add game Series to DataFrame
 			box_array = box_array.append(pd.Series(box_dict), ignore_index=True)
 	return box_array.sort_values(by='Date', ascending=True)
+
+
+def load_team(team_id):
+	names = load_json('team_names.json', fdir='data')
+	name = names[str(team_id)]
+	team = load_json(name+'.json', fdir=os.path.join('data', 'compiled_team_data'))
+	return team
 
 
 def build_team_ids():
@@ -154,6 +199,17 @@ def build_team_ids():
 	for tid, team in teams.iteritems():
 		teamid_dict[team['school']] = tid
 	dump_json(teamid_dict, 'team_ids.json', fdir='data', indent=4)
+
+
+def build_team_names():
+	"""
+	Maps school id # to name
+	"""
+	teams = load_json('all.json', fdir=os.path.join('data', 'compiled_team_data'))
+	teamid_dict = {}
+	for tid, team in teams.iteritems():
+		teamid_dict[tid] = team['school']
+	dump_json(teamid_dict, 'team_names.json', fdir='data', indent=4)
 
 
 def compile_and_save_teams(years='all', refresh_data=False):
