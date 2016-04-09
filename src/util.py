@@ -3,6 +3,16 @@ import json
 import shutil
 import errno
 
+
+def debug_assert(condition):
+	try:
+		assert(condition)
+	except AssertionError:
+		import pdb
+		pdb.set_trace()
+		print "Debugger set. Enter 'u' to go up in stack frame"
+
+
 def ensure_path(path):
 	"""
 	Make sure os path exists, create it if not

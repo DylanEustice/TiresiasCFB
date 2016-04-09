@@ -1,6 +1,6 @@
 import os
 import re
-from src.IOutils import load_json, dump_json, grab_scraper_data
+from src.util import load_json, dump_json, grab_scraper_data, debug_assert
 import pandas as pd
 import csv
 
@@ -70,12 +70,11 @@ def get_fields():
 
 
 def team_is_home(team_id, gameinfo):
-	try:
-		assert(int(team_id) == int(gameinfo['HomeTeamId']) or
-			   int(team_id) == int(gameinfo['AwayTeamId']))
-	except:
-		import pdb
-		pdb.set_trace()
+	"""
+	Checks team id against home team in gameinfo structure
+	"""
+	debug_assert(int(team_id) == int(gameinfo['HomeTeamId']) or
+				 int(team_id) == int(gameinfo['AwayTeamId']))
 	return int(team_id) == int(gameinfo['HomeTeamId'])
 
 
@@ -188,6 +187,11 @@ def load_team(team_id):
 	name = names[str(team_id)]
 	team = load_json(name+'.json', fdir=os.path.join('data', 'compiled_team_data'))
 	return team
+
+
+def load_team_DataFrame(team_id):
+	fname = str(team_id) + '_DataFrame.df'
+	return pd.read_pickle(os.path.join('data', 'compiled_team_data', fname))
 
 
 def build_team_ids():
