@@ -2,6 +2,7 @@
 *.txt
 *.json
 *.csv
+*.df
 
 # Python compile files
 *.pyc
