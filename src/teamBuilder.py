@@ -299,17 +299,3 @@ def load_team_json(team_id):
 def load_team_DataFrame(team_id):
 	fname = str(team_id) + '_DataFrame.df'
 	return pd.read_pickle(os.path.join('data', 'compiled_team_data', fname))
-
-
-def df_cols_to_inputs():
-	"""
-	"""
-	all_data = pd.read_pickle(os.path.join('data', 'compiled_team_data', 'all.df'))
-	no_inputs = load_json('no_inputs.json', fdir=os.path.join('data', 'network_input_info'))
-	cols = all_data.columns
-	inp_keys = {}
-	for c in cols:
-		if c not in no_inputs:
-			inp_keys[c] = True
-	fdir = os.path.join('data', 'network_input_info')
-	dump_json(inp_keys, 'all_data_keys.json', fdir=fdir, indent=4)
