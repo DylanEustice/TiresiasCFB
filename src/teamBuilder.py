@@ -135,25 +135,6 @@ def compile_fields():
 			writer.writerow([key])
 
 
-def get_fields():
-	"""
-	Load unique set of field names into boxscore and gameinfo key lists
-	"""
-	# boxscore
-	box_keys = []
-	with open(os.path.join('data', 'boxscore_fields.csv'), 'rb') as f:
-		reader = csv.reader(f)
-		for row in reader:
-			box_keys.append(row[0])
-	# gameinfo
-	game_keys = []
-	with open(os.path.join('data', 'gameinfo_fields.csv'), 'rb') as f:
-		reader = csv.reader(f)
-		for row in reader:
-			game_keys.append(row[0])
-	return box_keys, game_keys
-
-
 def build_team_ids():
 	"""
 	Map school name to id #
@@ -280,6 +261,25 @@ def team_boxscore_to_array(team, team_id):
 	return box_array.sort_values(by='Date', ascending=True)
 
 
+def get_fields():
+	"""
+	Load unique set of field names into boxscore and gameinfo key lists
+	"""
+	# boxscore
+	box_keys = []
+	with open(os.path.join('data', 'boxscore_fields.csv'), 'rb') as f:
+		reader = csv.reader(f)
+		for row in reader:
+			box_keys.append(row[0])
+	# gameinfo
+	game_keys = []
+	with open(os.path.join('data', 'gameinfo_fields.csv'), 'rb') as f:
+		reader = csv.reader(f)
+		for row in reader:
+			game_keys.append(row[0])
+	return box_keys, game_keys
+
+
 def team_is_home(team_id, gameinfo):
 	"""
 	Check team id against home team in gameinfo structure
@@ -294,8 +294,3 @@ def load_team_json(team_id):
 	name = names[str(team_id)]
 	team = load_json(name+'.json', fdir=os.path.join('data', 'compiled_team_data'))
 	return team
-
-
-def load_team_DataFrame(team_id):
-	fname = str(team_id) + '_DataFrame.df'
-	return pd.read_pickle(os.path.join('data', 'compiled_team_data', fname))
