@@ -9,11 +9,14 @@ this_year = 2016
 
 
 def build_all_from_scratch(refresh_data=True, years='all'):
+	print "Compiling teams .."
 	compile_and_save_teams(years=years, refresh_data=refresh_data)
 	compile_fields()
+	print "Building team info and data ..."
 	build_team_ids()
 	build_team_names()
 	build_team_DataFrames()
+	save_all_df_cols()
 
 
 def compile_and_save_teams(years='all', refresh_data=False):
@@ -56,7 +59,6 @@ def compile_teams(years='all', refresh_data=False):
 					setup_team_year(year, teams, newteam)
 		# Add all games to teams
 		for teamid in teams:
-			print teamid
 			for gameid in teamgame_index[str(teamid)]:
 				game_path = game_index[gameid]
 				game_year = re.search(r'data\W+(?P<year>\d{4})\W+gameinfo', game_path).group('year')
@@ -294,3 +296,12 @@ def load_team_json(team_id):
 	name = names[str(team_id)]
 	team = load_json(name+'.json', fdir=os.path.join('data', 'compiled_team_data'))
 	return team
+
+
+def save_all_df_cols():
+	all_data = pd.read_pickle(os.path.join('data', 'compiled_team_data', 'all.df'))
+	cols = all_data.columns
+	inout = {}
+	inout['inputs'] = [c for c in cols]
+	inout['outputs'] = [c for c in cols]
+	dump_json('all_df_fields.json', fdir=os.path.join('data', 'inout_fields'))
