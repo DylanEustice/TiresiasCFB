@@ -31,7 +31,7 @@ def dump_json(data, fname, fdir='.', indent=None):
 	"""
 	ensure_path(fdir)
 	with open(os.path.join(fdir, fname), 'w') as f:
-		json.dump(data, f, indent=indent)
+		json.dump(data, f, indent=indent, sort_keys=True)
 
 
 def load_json(fname, fdir='.'):
