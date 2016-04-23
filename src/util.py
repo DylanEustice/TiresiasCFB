@@ -69,6 +69,6 @@ def grab_scraper_data(src=os.path.join('..','BarrelRollCFBData','data'),
 	copy_dir(src, dst)
 
 
-def load_team_DataFrame(team_id):
+def load_team_DataFrame(team_id, path_to_data='.'):
 	fname = str(team_id) + '_DataFrame.df'
-	return pd.read_pickle(os.path.join('data', 'compiled_team_data', fname))
+	return pd.read_pickle(os.path.join(path_to_data, 'data', 'compiled_team_data', fname))
