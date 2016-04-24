@@ -2,6 +2,7 @@ import os
 import json
 import shutil
 import errno
+import pandas as pd
 
 
 def debug_assert(condition):
@@ -24,7 +25,7 @@ def ensure_path(path):
 			raise
 
 
-def dump_json(data, fname, fdir='.', indent=None):
+def dump_json(data, fname, fdir='.', indent=4):
 	"""
 	Save data to file. 
 	NOTE: Writes as text file, not binary.
