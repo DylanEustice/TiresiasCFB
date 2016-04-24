@@ -197,8 +197,8 @@ def team_boxscore_to_array(team, team_id):
 		for key in box_keys_unq:
 			box_keys.append(pos+key)
 	# loop through all games
+	box_array = pd.DataFrame(columns=game_keys + box_keys)
 	for year, games in team['games'].iteritems():
-		box_array = pd.DataFrame(columns=game_keys + box_keys)
 		this_conf = team['teamInfo'][year]['ConferenceId']
 		for gid, game in games.iteritems():
 			box_dict = {}
@@ -304,4 +304,4 @@ def save_all_df_cols():
 	inout = {}
 	inout['inputs'] = [c for c in cols]
 	inout['outputs'] = [c for c in cols]
-	dump_json('all_df_fields.json', fdir=os.path.join('data', 'inout_fields'))
+	dump_json(inout, 'all_df_fields.json', fdir=os.path.join('data', 'inout_fields'))
