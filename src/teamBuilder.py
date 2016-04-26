@@ -260,7 +260,9 @@ def team_boxscore_to_array(team, team_id):
 						box_dict[key] = '-'
 			# Add game Series to DataFrame
 			box_array = box_array.append(pd.Series(box_dict), ignore_index=True)
-	return box_array.sort_values(by='Date', ascending=True)
+	sorted_box_array = box_array.sort_values(by='DateUtc', ascending=True)
+	sorted_box_array = sorted_box_array.reset_index()
+	return sorted_box_array
 
 
 def get_fields():
