@@ -3,6 +3,7 @@ import json
 import shutil
 import errno
 import pandas as pd
+import numpy as np
 
 
 def debug_assert(condition):
@@ -73,3 +74,19 @@ def grab_scraper_data(src=os.path.join('..','BarrelRollCFBData','data'),
 def load_team_DataFrame(team_id, path_to_data='.'):
 	fname = str(team_id) + '_DataFrame.df'
 	return pd.read_pickle(os.path.join(path_to_data, 'data', 'compiled_team_data', fname))
+
+
+def standardize_data(data, std=None, mean=None):
+	"""
+	Standardize numpy array data using formula:
+		x_out = (x - x_mean) / x_std
+	Assumes data is M x N where M is the observations and
+	N is the data type.
+	"""
+	if std is None and mean is None:
+		return np.divide(data - data.mean(axis=0), data.std(axis=0))
+	elif std is not None and mean is not None:
+		return np.divide(data - mean, std)
+	else:
+		UserWarning("Must enter both STD and MEAN, only one entered.")
+		return None
