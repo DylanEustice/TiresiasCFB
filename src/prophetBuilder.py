@@ -4,7 +4,7 @@ import neurolab as nl
 import matplotlib.pyplot as plt
 import argparse
 import os
-from src.util import load_json, standardize_data
+from src.util import load_json, standardize_data, moving_avg
 
 # global paths
 IO_DIR = os.path.join('data', 'inout_fields')
@@ -55,19 +55,64 @@ class Game:
 
 def train_network(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
 	# get data
-	inp, tar = setup_train_data(io_name, io_dir=io_dir,
-								n_prev_games=n_prev_games, min_date=min_date)
+	games, inp, tar, raw_inp, raw_tar = setup_train_data(
+		io_name, io_dir=io_dir,	n_prev_games=n_prev_games, min_date=min_date)
+	# randomly partition games for training and validation
+	gids = list(set(g.id for g in games))
+	rnd_vec = np.random.random(len(gids))
+	train_per = 0.5
+	train_idx = rnd_vec < train_per
+	train_gids = {id_ for i, id_ in enumerate(gids) if train_idx[i]}
+	# partition
+	train = {}
+	train['inp'] = inp[np.array([g.id in train_gids for g in games]),:]
+	train['tar'] = tar[np.array([g.id in train_gids for g in games]),:]
+	test = {}
+	test['inp'] = inp[np.array([g.id not in train_gids for g in games]),:]
+	test['tar'] = tar[np.array([g.id not in train_gids for g in games]),:]
 	# set up network parameters
-	hid_lyr = 50
-	lyr = [nl.trans.LogSig(), nl.trans.PureLin()]
-	epochs = 500
+	hid_lyr = 10
+	lyr = [nl.trans.SoftMax(), nl.trans.PureLin()]
+	epochs = 2000
 	show = 50
-	lr = 0.001
+	lr = 0.00001
+	update_freq = 20
 	trainf = nl.train.train_gdm
 	# set up network
-	net = nl.net.newff(zip(inp.min(axis=0), inp.max(axis=0)), [hid_lyr, tar.shape[1]], lyr)
+	lyr_rng = zip(train['inp'].min(axis=0), train['inp'].max(axis=0))
+	net = nl.net.newff(lyr_rng, [hid_lyr, train['tar'].shape[1]], lyr)
 	net.trainf = trainf
-	error = net.train(inp, tar, epochs=epochs, show=show, lr=lr)
+	# train network
+	error_test = []
+	error_train = []
+	msef = nl.error.MSE()
+	for i in range(epochs / update_freq):
+		error_tmp = net.train(train['inp'], train['tar'], epochs=update_freq, show=show, lr=lr)
+		error_train.append(msef(train['tar'], net.sim(train['inp'])))
+		error_test.append(msef(test['tar'], net.sim(test['inp'])))
+		print "Iters: {}".format(i*update_freq)
+		print "Train: {}".format(error_train[-1])
+		print " Test: {}".format(error_test[-1])
+	# plotting
+	plt.ion()
+	plt.figure()
+	x = range(epochs / update_freq)
+	plt.plot(x, error_train, x, error_test)
+	fig = plt.figure()
+	out = (net.sim(train['inp']), net.sim(test['inp']))
+	idx = (np.argsort(np.ndarray.flatten(train['tar'])), 
+		   np.argsort(np.ndarray.flatten(test['tar'])))
+	ax1 = fig.add_subplot(121)
+	ax2 = fig.add_subplot(122)
+	# train
+	ax1.plot(np.ndarray.flatten(train['tar'])[idx[0]], 'o')
+	ax1.plot(np.ndarray.flatten(out[0])[idx[0]], 'o')
+	ax1.plot(moving_avg(np.ndarray.flatten(out[0])[idx[0]]), 'o')
+	# test
+	ax2.plot(np.ndarray.flatten(test['tar'])[idx[1]], 'o')
+	ax2.plot(np.ndarray.flatten(out[1])[idx[1]], 'o')
+	ax2.plot(moving_avg(np.ndarray.flatten(out[1])[idx[1]]), 'o')
+	return net, error, train, test
 
 
 def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
@@ -80,7 +125,7 @@ def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
 	# standardize data
 	norm_inp = standardize_data(raw_inp.astype('double'))
 	norm_tar = standardize_data(raw_tar.astype('double'))
-	return norm_inp, norm_tar
+	return games, norm_inp, norm_tar, raw_inp, raw_tar
 
 
 def build_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
@@ -118,7 +163,9 @@ def build_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
 			# build game class instance and append
 			new_game = Game(this_prev_games, other_prev_games, n_prev_games,
 							inp_fields, inp_fields, out_fields, game)
-			games.append(new_game)
+			if (new_game.this_inp_data.shape[0] > 0 and 
+				new_game.other_inp_data.shape[0] > 0):
+				games.append(new_game)
 	print '\nDone.\n'
 	return games
 
