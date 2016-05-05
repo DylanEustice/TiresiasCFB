@@ -90,3 +90,12 @@ def standardize_data(data, std=None, mean=None):
 	else:
 		UserWarning("Must enter both STD and MEAN, only one entered.")
 		return None
+
+
+def moving_avg(data, n=10):
+	"""
+	Calculate n long moving average
+	"""
+	ret = np.cumsum(data)
+	ret[n:] = ret[n:] - ret[:-n]
+	return ret[n-1:] / n
