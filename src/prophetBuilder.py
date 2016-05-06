@@ -73,7 +73,7 @@ def train_net_from_scratch(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None
 	net = setup_network(train, hid_lyr=hid_lyr, trainf=trainf, lyr=lyr)
 	net = train_network(net, train, test, lr=lr, epochs=epochs,
 		update_freq=update_freq, show=show)
-	return net
+	return net, train, test, games, norm_inp, norm_tar, raw_inp, raw_tar
 
 
 def partition_data(games, inp, tar, train_pct=0.5):
@@ -134,11 +134,16 @@ def train_network(net, train, test, lr=0.001, epochs=100, update_freq=20, show=2
 		print "Iters: {}".format(i*update_freq)
 		print "Train: {}".format(error_train[-1])
 		print " Test: {}".format(error_test[-1])
+	plot_data(net, error_train, error_test, train, test)
+	return net, error_train, error_test, train, test
 
-	# plotting
+
+def plot_data(net, error_train, error_test, train, test):
+	"""
+	"""
 	plt.ion()
 	plt.figure()
-	x = range(epochs / update_freq)
+	x = range(len(error_train))
 	plt.plot(x, error_train, x, error_test)
 	fig = plt.figure()
 	out = (net.sim(train['inp']), net.sim(test['inp']))
@@ -154,7 +159,6 @@ def train_network(net, train, test, lr=0.001, epochs=100, update_freq=20, show=2
 	ax2.plot(np.ndarray.flatten(test['tar'])[idx[1]], 'o')
 	ax2.plot(np.ndarray.flatten(out[1])[idx[1]], 'o')
 	ax2.plot(moving_avg(np.ndarray.flatten(out[1])[idx[1]]), 'o')
-	return net, error_train, error_test, train, test
 
 
 def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
