@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import neurolab as nl
 import matplotlib.pyplot as plt
-import argparse
 import os
+import copy
 from src.util import load_json, standardize_data, moving_avg
 
 # global paths
@@ -67,13 +67,14 @@ def train_net_from_scratch(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None
 	"""
 	Setup data, setup network, and train network given inputs
 	"""
-	games, norm_inp, norm_tar, raw_inp, raw_tar = setup_train_data(io_name, 
-		io_dir=io_dir, n_prev_games=n_prev_games, min_date=min_date)
-	train, test = partition_data(games, norm_inp, norm_tar, train_pct=train_pct)
+	data = setup_train_data(io_name, io_dir=io_dir, n_prev_games=n_prev_games,
+		min_date=min_date)
+	train, test = partition_data(data['games'], data['norm_inp'],
+		data['norm_tar'], train_pct=train_pct)
 	net = setup_network(train, hid_lyr=hid_lyr, trainf=trainf, lyr=lyr)
-	net = train_network(net, train, test, lr=lr, epochs=epochs,
+	net, error = train_network(net, train, test, lr=lr, epochs=epochs,
 		update_freq=update_freq, show=show)
-	return net, train, test, games, norm_inp, norm_tar, raw_inp, raw_tar
+	return net, data, train, test, error
 
 
 def partition_data(games, inp, tar, train_pct=0.5):
@@ -123,28 +124,35 @@ def train_network(net, train, test, lr=0.001, epochs=100, update_freq=20, show=2
 	update_freq:	frequency which error is checked and outputted
 	show:			frequency which neurolab outputs training updates
 	"""
-	# train network
 	error_test = []
 	error_train = []
 	msef = nl.error.MSE()
+	best_net = copy.deepcopy(net)
+	best_error = float('inf')
 	for i in range(epochs / update_freq):
-		error_tmp = net.train(train['inp'], train['tar'], epochs=update_freq, show=show, lr=lr)
+		error_tmp = net.train(train['inp'], train['tar'], epochs=update_freq,
+			show=show, lr=lr)
 		error_train.append(msef(train['tar'], net.sim(train['inp'])))
 		error_test.append(msef(test['tar'], net.sim(test['inp'])))
+		if error_test[-1] < best_error:
+			best_net = copy.deepcopy(net)
 		print "Iters: {}".format(i*update_freq)
 		print "Train: {}".format(error_train[-1])
 		print " Test: {}".format(error_test[-1])
-	plot_data(net, error_train, error_test, train, test)
-	return net, error_train, error_test, train, test
+	error = {}
+	error['train'] = error_train
+	error['test'] = error_test
+	plot_data(best_net, error, train, test)
+	return best_net, error
 
 
-def plot_data(net, error_train, error_test, train, test):
+def plot_data(net, error, train, test, alpha=0.1):
 	"""
 	"""
 	plt.ion()
 	plt.figure()
-	x = range(len(error_train))
-	plt.plot(x, error_train, x, error_test)
+	x = range(len(error['train']))
+	plt.plot(x, error['train'], x, error['test'])
 	fig = plt.figure()
 	out = (net.sim(train['inp']), net.sim(test['inp']))
 	idx = (np.argsort(np.ndarray.flatten(train['tar'])), 
@@ -152,13 +160,13 @@ def plot_data(net, error_train, error_test, train, test):
 	ax1 = fig.add_subplot(121)
 	ax2 = fig.add_subplot(122)
 	# train
-	ax1.plot(np.ndarray.flatten(train['tar'])[idx[0]], 'o')
-	ax1.plot(np.ndarray.flatten(out[0])[idx[0]], 'o')
-	ax1.plot(moving_avg(np.ndarray.flatten(out[0])[idx[0]]), 'o')
+	ax1.plot(np.ndarray.flatten(train['tar'])[idx[0]], 'o', alpha=alpha)
+	ax1.plot(np.ndarray.flatten(out[0])[idx[0]], 'o', alpha=alpha)
+	# ax1.plot(moving_avg(np.ndarray.flatten(out[0])[idx[0]], n=100), 'o', alpha=alpha)
 	# test
-	ax2.plot(np.ndarray.flatten(test['tar'])[idx[1]], 'o')
-	ax2.plot(np.ndarray.flatten(out[1])[idx[1]], 'o')
-	ax2.plot(moving_avg(np.ndarray.flatten(out[1])[idx[1]]), 'o')
+	ax2.plot(np.ndarray.flatten(test['tar'])[idx[1]], 'o', alpha=alpha)
+	ax2.plot(np.ndarray.flatten(out[1])[idx[1]], 'o', alpha=alpha)
+	# ax2.plot(moving_avg(np.ndarray.flatten(out[1])[idx[1]], n=100), 'o', alpha=alpha)
 
 
 def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
@@ -169,7 +177,8 @@ def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
 	min_date:		last date of games to pull data from
 	"""
 	# build all games and get data arrays
-	games = build_data(io_name, io_dir=io_dir, n_prev_games=n_prev_games, min_date=min_date)
+	games = build_data(io_name, io_dir=io_dir, n_prev_games=n_prev_games,
+		min_date=min_date)
 	this_inp = np.vstack([g.avg_inp(use_this=True) for g in games])
 	other_inp = np.vstack([g.avg_inp(use_this=False) for g in games])
 	raw_inp = np.hstack([this_inp, other_inp])
@@ -177,7 +186,13 @@ def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
 	# standardize data
 	norm_inp = standardize_data(raw_inp.astype('double'))
 	norm_tar = standardize_data(raw_tar.astype('double'))
-	return games, norm_inp, norm_tar, raw_inp, raw_tar
+	out_data = {}
+	out_data['games'] = games
+	out_data['norm_inp'] = norm_inp
+	out_data['norm_tar'] = norm_tar
+	out_data['raw_inp'] = raw_inp
+	out_data['raw_tar'] = raw_tar
+	return out_data
 
 
 def build_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
@@ -202,9 +217,10 @@ def build_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
 			# ensure game is after min_date, score field isn't blank,
 			# and opponent is in history
 			is_recent = game['DateUtc'] >= min_date
-			has_score = not any(game[out_fields] == '-')
+			out_data = game[out_fields]
+			has_output = not any(out_data == '-') and all(pd.notnull(out_data))
 			opp_avail = game['other_TeamId'] in data_by_team
-			if not (is_recent and has_score and opp_avail):
+			if not (is_recent and has_output and opp_avail):
 				continue
 			# get previous games played by both teams
 			other_all_games = data_by_team[game['other_TeamId']]
