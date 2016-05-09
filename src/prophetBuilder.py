@@ -4,7 +4,7 @@ import neurolab as nl
 import matplotlib.pyplot as plt
 import os
 import copy
-from src.util import load_json, standardize_data, moving_avg
+from src.util import *
 
 # global paths
 IO_DIR = os.path.join('data', 'inout_fields')
@@ -33,6 +33,7 @@ class Game:
 		self.other_inp_data = self.filter_inp(other_inp_data, other_inp_fields)
 		self.avg_inp_f = avg_inp_callback
 		self.avg_inp_kwargs = kwargs
+		# Get target data if exists
 		if tar_data is not None:
 			self.id = tar_data['Id']
 			self.tar_data = tar_data[out_fields]
@@ -43,6 +44,12 @@ class Game:
 			self.tar_data = None
 			self.date = None
 			self.tids = None
+		# Average inputs (set to tar_data option for autoencoder)
+		if self.n_prev > -1:
+			self.inp_data = self.all_inp()
+		else:
+			self.inp_data = self.tar_data
+			
 
 	def filter_inp(self, inp_data, inp_fields):
 		"""
@@ -56,6 +63,9 @@ class Game:
 		inp_data_np	= inp_data_np[~np.isnan(inp_data_np).any(axis=1)]
 		return inp_data_np[0:min(inp_data_np.shape[0], self.n_prev), :]
 
+	def all_inp(self):
+		return np.hstack([self.avg_inp(use_this=True), self.avg_inp(use_this=False)])
+
 	def avg_inp(self, use_this=True):
 		data = self.this_inp_data if use_this else self.other_inp_data
 		return self.avg_inp_f(data, **self.avg_inp_kwargs)
@@ -63,7 +73,7 @@ class Game:
 
 def train_net_from_scratch(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
 	hid_lyr=10, trainf=nl.train.train_gdm, lyr=[nl.trans.SoftMax(),nl.trans.PureLin()],
-	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20):
+	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0, ibias=1.0):
 	"""
 	Setup data, setup network, and train network given inputs
 	"""
@@ -71,7 +81,8 @@ def train_net_from_scratch(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None
 		min_date=min_date)
 	train, test = partition_data(data['games'], data['norm_inp'],
 		data['norm_tar'], train_pct=train_pct)
-	net = setup_network(train, hid_lyr=hid_lyr, trainf=trainf, lyr=lyr)
+	net = setup_network(train, hid_lyr=hid_lyr, trainf=trainf, lyr=lyr,
+		minmax=minmax, ibias=ibias)
 	net, error = train_network(net, train, test, lr=lr, epochs=epochs,
 		update_freq=update_freq, show=show)
 	return net, data, train, test, error
@@ -100,7 +111,7 @@ def partition_data(games, inp, tar, train_pct=0.5):
 
 
 def setup_network(train_data, hid_lyr=10, trainf=nl.train.train_gdm,
-	lyr=[nl.trans.SoftMax(),nl.trans.PureLin()]):
+	lyr=[nl.trans.SoftMax(),nl.trans.PureLin()], minmax=1.0, ibias=1.0):
 	"""
 	train_data: used to set input and output layer sizes
 	hid_lyr:	size of the hidden network layer
@@ -110,6 +121,9 @@ def setup_network(train_data, hid_lyr=10, trainf=nl.train.train_gdm,
 	lyr_rng = zip(train_data['inp'].min(axis=0), train_data['inp'].max(axis=0))
 	net = nl.net.newff(lyr_rng, [hid_lyr, train_data['tar'].shape[1]], lyr)
 	net.trainf = trainf
+	for l in net.layers:
+		l.initf = nl.init.InitRand([-minmax, minmax], 'wb')
+	net.layers[0].np['b'][:] = 1.0
 	return net
 
 
@@ -179,13 +193,11 @@ def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
 	# build all games and get data arrays
 	games = build_data(io_name, io_dir=io_dir, n_prev_games=n_prev_games,
 		min_date=min_date)
-	this_inp = np.vstack([g.avg_inp(use_this=True) for g in games])
-	other_inp = np.vstack([g.avg_inp(use_this=False) for g in games])
-	raw_inp = np.hstack([this_inp, other_inp])
+	raw_inp = np.vstack([g.inp_data for g in games])
 	raw_tar = np.vstack([g.tar_data for g in games])
 	# standardize data
-	norm_inp = standardize_data(raw_inp.astype('double'))
-	norm_tar = standardize_data(raw_tar.astype('double'))
+	norm_inp = normalize_data(raw_inp.astype('double'))
+	norm_tar = normalize_data(raw_tar.astype('double'))
 	out_data = {}
 	out_data['games'] = games
 	out_data['norm_inp'] = norm_inp
