@@ -92,6 +92,22 @@ def standardize_data(data, std=None, mean=None):
 		return None
 
 
+def normalize_data(data, min_=None, max_=None):
+	"""
+	Normalize numpy array data using formula:
+		x_out = (x - x_min) / x_max
+	Assumes data is M x N where M is the observations and
+	N is the data type.
+	"""
+	if min_ is None and max_ is None:
+		return np.divide(data - data.min(axis=0), data.max(axis=0))
+	elif min_ is not None and max_ is not None:
+		return np.divide(data - min_, max_)
+	else:
+		UserWarning("Must enter both STD and MEAN, only one entered.")
+		return None
+
+
 def moving_avg(data, n=10):
 	"""
 	Calculate n long moving average
@@ -99,3 +115,10 @@ def moving_avg(data, n=10):
 	ret = np.cumsum(data)
 	ret[n:] = ret[n:] - ret[:-n]
 	return ret[n-1:] / n
+
+
+def get_winner_acc(net, data):
+	out = net.sim(data['inp'])
+	tar_idx = data['tar'][:,1] > data['tar'][:,0]
+	out_idx = out[:,1] > out[:,0]
+	return 1.*np.sum(tar_idx == out_idx) / tar_idx.shape[0]
