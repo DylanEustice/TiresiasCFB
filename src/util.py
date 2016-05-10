@@ -118,7 +118,19 @@ def moving_avg(data, n=10):
 
 
 def get_winner_acc(net, data):
+	"""
+	Given a neural network to predict game outcomes,
+	calculate the % the winner is correct
+	"""
 	out = net.sim(data['inp'])
 	tar_idx = data['tar'][:,1] > data['tar'][:,0]
 	out_idx = out[:,1] > out[:,0]
 	return 1.*np.sum(tar_idx == out_idx) / tar_idx.shape[0]
+
+
+def idv_out_mse(out, tar):
+	"""
+	Return an array of the MSE for each individual output
+	"""
+	diff = out - tar
+	return np.mean(np.power(diff, 2), axis=0)
