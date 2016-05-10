@@ -3,6 +3,7 @@
 *.json
 *.csv
 *.df
+*.pkl
 
 # Python compile files
 *.pyc

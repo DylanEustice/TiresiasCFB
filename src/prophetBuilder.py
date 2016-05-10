@@ -4,11 +4,55 @@ import neurolab as nl
 import matplotlib.pyplot as plt
 import os
 import copy
+import pickle
 from src.util import *
 
 # global paths
 IO_DIR = os.path.join('data', 'inout_fields')
 COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
+PRM_DIR = os.path.join('data', 'network_params')
+
+
+class Params:
+	def __init__(self, io_name, io_dir, n_prev_games, min_date, trainf, lyr,
+		train_pct, lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg):
+		self.io_name = io_name
+		self.io_dir = io_dir
+		self.n_prev_games = n_prev_games
+		self.min_date = min_date
+		self.trainf = trainf
+		self.lyr = lyr
+		self.train_pct = train_pct
+		self.lr = lr
+		self.epochs = epochs
+		self.update_freq = update_freq
+		self.show = show
+		self.minmax = minmax
+		self.hid_lyr = hid_lyr
+		self.ibias = ibias
+		self.inp_avg = inp_avg
+
+	@classmethod
+	def load(prms, fname, fdir=PRM_DIR):
+		this = prms(*[None]*15)
+		with open(os.path.join(fdir, fname),"r") as f:
+			this = pickle.load(f)
+		return this
+
+	def save(self, fname, fdir=PRM_DIR):
+		with open(os.path.join(fdir, fname),"w") as f:
+			pickle.dump(self, f)
+
+	def print_self(self):
+		members = self.get_members()
+		for m in members:
+			print m, ":", getattr(self, m)
+
+	def get_members(self):
+		return [attr for attr in dir(self) if not attr.startswith("__")]
+
+
+
 
 
 class Game:
@@ -22,7 +66,7 @@ class Game:
 		inp_fields:			fields of input data used for prediction
 		out_fields: 		fields of output data being predicted
 		avg_inp_callback:	function used to average input games
-		tar_data:			data for game to be predicted (None if game has not occurred)
+		tar_data:			target data to predict (None if game has not occurred)
 		kwargs:				used for avg_inp_callback
 		"""
 		self.n_prev = n_prev
@@ -73,12 +117,13 @@ class Game:
 
 def train_net_from_scratch(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
 	hid_lyr=10, trainf=nl.train.train_gdm, lyr=[nl.trans.SoftMax(),nl.trans.PureLin()],
-	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0, ibias=1.0):
+	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0,
+	ibias=1.0, inp_avg=np.mean):
 	"""
 	Setup data, setup network, and train network given inputs
 	"""
 	data = setup_train_data(io_name, io_dir=io_dir, n_prev_games=n_prev_games,
-		min_date=min_date)
+		min_date=min_date, inp_avg=inp_avg)
 	train, test = partition_data(data['games'], data['norm_inp'],
 		data['norm_tar'], train_pct=train_pct)
 	net = setup_network(train, hid_lyr=hid_lyr, trainf=trainf, lyr=lyr,
@@ -86,6 +131,76 @@ def train_net_from_scratch(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None
 	net, error = train_network(net, train, test, lr=lr, epochs=epochs,
 		update_freq=update_freq, show=show)
 	return net, data, train, test, error
+
+
+def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
+	inp_avg=np.mean):
+	"""
+	io_name:		name of file listing I/O field names
+	io_dir:			directory of I/O file
+	n_prev_games:	max number of previous games to consider as input
+	min_date:		last date of games to pull data from
+	"""
+	# build all games and get data arrays
+	games = build_data(io_name, io_dir=io_dir, n_prev_games=n_prev_games,
+		min_date=min_date, inp_avg=inp_avg)
+	raw_inp = np.vstack([g.inp_data for g in games])
+	raw_tar = np.vstack([g.tar_data for g in games])
+	# standardize data
+	norm_inp = normalize_data(raw_inp.astype('double'))
+	norm_tar = normalize_data(raw_tar.astype('double'))
+	out_data = {}
+	out_data['games'] = games
+	out_data['norm_inp'] = norm_inp
+	out_data['norm_tar'] = norm_tar
+	out_data['raw_inp'] = raw_inp
+	out_data['raw_tar'] = raw_tar
+	return out_data
+
+
+def build_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
+	inp_avg=np.mean):
+	"""
+	Read from compiled dataFrame and builds up a list of games which
+	occurred after min_date. Format data according to the I/O file
+	name provided. Games are used for prediction/training.
+	"""
+	# Read I/O fields
+	io_fields = load_json(io_name, fdir=io_dir)
+	inp_fields = io_fields['inputs']
+	out_fields = io_fields['outputs']
+	# Read data and seperate by teams
+	all_data = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'all.df'))
+	data_by_team = partition_data_to_teams(all_data)
+	# Build sets of inputs and target outputs for all possible games
+	games = []
+	for tid, tgames in data_by_team.iteritems():
+		print "{0:g},".format(tid), 
+		# all previous games are potential inputs
+		for _, game in tgames.iterrows():
+			# ensure game is after min_date, score field isn't blank,
+			# and opponent is in history
+			is_recent = game['DateUtc'] >= min_date
+			out_data = game[out_fields]
+			has_output = not any(out_data == '-') and all(pd.notnull(out_data))
+			opp_avail = game['other_TeamId'] in data_by_team
+			if not (is_recent and has_output and opp_avail):
+				continue
+			# get previous games played by both teams
+			other_all_games = data_by_team[game['other_TeamId']]
+			this_prev_games = tgames[game['DateUtc'] > tgames['DateUtc']]
+			other_prev_games = other_all_games[game['DateUtc']
+							   > other_all_games['DateUtc']]
+			if this_prev_games.shape[0] <= 0 or other_prev_games.shape[0] <= 0:
+				continue
+			# build game class instance and append
+			new_game = Game(this_prev_games, other_prev_games, n_prev_games,
+				inp_fields, inp_fields, out_fields, inp_avg, tar_data=game, axis=0)
+			if (new_game.this_inp_data.shape[0] > 0 and 
+				new_game.other_inp_data.shape[0] > 0):
+				games.append(new_game)
+	print '\nDone.\n'
+	return games
 
 
 def partition_data(games, inp, tar, train_pct=0.5):
@@ -176,78 +291,9 @@ def plot_data(net, error, train, test, alpha=0.1):
 	# train
 	ax1.plot(np.ndarray.flatten(train['tar'])[idx[0]], 'o', alpha=alpha)
 	ax1.plot(np.ndarray.flatten(out[0])[idx[0]], 'o', alpha=alpha)
-	# ax1.plot(moving_avg(np.ndarray.flatten(out[0])[idx[0]], n=100), 'o', alpha=alpha)
 	# test
 	ax2.plot(np.ndarray.flatten(test['tar'])[idx[1]], 'o', alpha=alpha)
 	ax2.plot(np.ndarray.flatten(out[1])[idx[1]], 'o', alpha=alpha)
-	# ax2.plot(moving_avg(np.ndarray.flatten(out[1])[idx[1]], n=100), 'o', alpha=alpha)
-
-
-def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
-	"""
-	io_name:		name of file listing I/O field names
-	io_dir:			directory of I/O file
-	n_prev_games:	max number of previous games to consider as input
-	min_date:		last date of games to pull data from
-	"""
-	# build all games and get data arrays
-	games = build_data(io_name, io_dir=io_dir, n_prev_games=n_prev_games,
-		min_date=min_date)
-	raw_inp = np.vstack([g.inp_data for g in games])
-	raw_tar = np.vstack([g.tar_data for g in games])
-	# standardize data
-	norm_inp = normalize_data(raw_inp.astype('double'))
-	norm_tar = normalize_data(raw_tar.astype('double'))
-	out_data = {}
-	out_data['games'] = games
-	out_data['norm_inp'] = norm_inp
-	out_data['norm_tar'] = norm_tar
-	out_data['raw_inp'] = raw_inp
-	out_data['raw_tar'] = raw_tar
-	return out_data
-
-
-def build_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None):
-	"""
-	Read from compiled dataFrame and builds up a list of games which
-	occurred after min_date. Format data according to the I/O file
-	name provided. Games are used for prediction/training.
-	"""
-	# Read I/O fields
-	io_fields = load_json(io_name, fdir=io_dir)
-	inp_fields = io_fields['inputs']
-	out_fields = io_fields['outputs']
-	# Read data and seperate by teams
-	all_data = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'all.df'))
-	data_by_team = partition_data_to_teams(all_data)
-	# Build sets of inputs and target outputs for all possible games
-	games = []
-	for tid, tgames in data_by_team.iteritems():
-		print "{0:g},".format(tid), 
-		# all previous games are potential inputs
-		for _, game in tgames.iterrows():
-			# ensure game is after min_date, score field isn't blank,
-			# and opponent is in history
-			is_recent = game['DateUtc'] >= min_date
-			out_data = game[out_fields]
-			has_output = not any(out_data == '-') and all(pd.notnull(out_data))
-			opp_avail = game['other_TeamId'] in data_by_team
-			if not (is_recent and has_output and opp_avail):
-				continue
-			# get previous games played by both teams
-			other_all_games = data_by_team[game['other_TeamId']]
-			this_prev_games = tgames[game['DateUtc'] > tgames['DateUtc']]
-			other_prev_games = other_all_games[game['DateUtc'] > other_all_games['DateUtc']]
-			if this_prev_games.shape[0] <= 0 or other_prev_games.shape[0] <= 0:
-				continue
-			# build game class instance and append
-			new_game = Game(this_prev_games, other_prev_games, n_prev_games,
-				inp_fields, inp_fields, out_fields, np.mean, tar_data=game, axis=0)
-			if (new_game.this_inp_data.shape[0] > 0 and 
-				new_game.other_inp_data.shape[0] > 0):
-				games.append(new_game)
-	print '\nDone.\n'
-	return games
 
 
 def partition_data_to_teams(all_data):
