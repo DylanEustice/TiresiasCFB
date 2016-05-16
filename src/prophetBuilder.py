@@ -125,52 +125,38 @@ def build_prms_file(prm_name, io_name, io_dir=IO_DIR, n_prev_games=6, min_date=N
 		pickle.dump(prms, f)
 
 
-def train_net_from_prms(prm_name):
+def train_net_from_prms(prm_name, norm_func=normalize_data):
 	"""
 	Load .prm file and train network based on those parameters
 	"""
-	p = Params.load(prm_name)
-	net = train_net_from_scratch(p.io_name, io_dir=p.io_dir, n_prev_games=p.n_prev_games,
-		min_date=p.min_date, hid_lyr=p.hid_lyr, trainf=p.trainf, lyr=p.lyr,
-		train_pct=p.train_pct, lr=p.lr, epochs=p.epochs, update_freq=p.update_freq,
-		show=p.show, minmax=p.minmax, ibias=p.ibias, inp_avg=p.inp_avg)
+	prm = Params.load(prm_name)
+	net = train_net_from_scratch(prm, norm_func)
 	return net
 
 
-def train_net_from_scratch(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
-	hid_lyr=10, trainf=nl.train.train_gdm, lyr=[nl.trans.SoftMax(),nl.trans.PureLin()],
-	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0,
-	ibias=1.0, inp_avg=np.mean):
+def train_net_from_scratch(prm, norm_func=normalize_data):
 	"""
 	Setup data, setup network, and train network given inputs
 	"""
-	data = setup_train_data(io_name, io_dir=io_dir, n_prev_games=n_prev_games,
-		min_date=min_date, inp_avg=inp_avg)
+	data = setup_train_data(prm, norm_func)
 	train, test = partition_data(data['games'], data['norm_inp'],
-		data['norm_tar'], train_pct=train_pct)
-	net = setup_network(train, hid_lyr=hid_lyr, trainf=trainf, lyr=lyr,
-		minmax=minmax, ibias=ibias)
-	net, error = train_network(net, train, test, lr=lr, epochs=epochs,
-		update_freq=update_freq, show=show)
+		data['norm_tar'], train_pct=prm.train_pct)
+	net = setup_network(train, prm)
+	net, error = train_network(net, train, test, prm)
 	return net, data, train, test, error
 
 
-def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
-	inp_avg=np.mean):
+def setup_train_data(prm, norm_func=normalize_data):
 	"""
-	io_name:		name of file listing I/O field names
-	io_dir:			directory of I/O file
-	n_prev_games:	max number of previous games to consider as input
-	min_date:		last date of games to pull data from
+	prm: paramters file
 	"""
 	# build all games and get data arrays
-	games = build_data(io_name, io_dir=io_dir, n_prev_games=n_prev_games,
-		min_date=min_date, inp_avg=inp_avg)
+	games = build_data(prm)
 	raw_inp = np.vstack([g.inp_data for g in games])
 	raw_tar = np.vstack([g.tar_data for g in games])
 	# standardize data
-	norm_inp = normalize_data(raw_inp.astype('double'))
-	norm_tar = normalize_data(raw_tar.astype('double'))
+	norm_inp = norm_func(raw_inp.astype('double'))
+	norm_tar = norm_func(raw_tar.astype('double'))
 	out_data = {}
 	out_data['games'] = games
 	out_data['norm_inp'] = norm_inp
@@ -180,15 +166,14 @@ def setup_train_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
 	return out_data
 
 
-def build_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
-	inp_avg=np.mean):
+def build_data(prm):
 	"""
 	Read from compiled dataFrame and builds up a list of games which
 	occurred after min_date. Format data according to the I/O file
 	name provided. Games are used for prediction/training.
 	"""
 	# Read I/O fields
-	io_fields = load_json(io_name, fdir=io_dir)
+	io_fields = load_json(prm.io_name, fdir=prm.io_dir)
 	inp_fields = io_fields['inputs']
 	out_fields = io_fields['outputs']
 	# Read data and seperate by teams
@@ -202,7 +187,7 @@ def build_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
 		for _, game in tgames.iterrows():
 			# ensure game is after min_date, score field isn't blank,
 			# and opponent is in history
-			is_recent = game['DateUtc'] >= min_date
+			is_recent = game['DateUtc'] >= prm.min_date
 			out_data = game[out_fields]
 			has_output = not any(out_data == '-') and all(pd.notnull(out_data))
 			opp_avail = game['other_TeamId'] in data_by_team
@@ -216,8 +201,8 @@ def build_data(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
 			if this_prev_games.shape[0] <= 0 or other_prev_games.shape[0] <= 0:
 				continue
 			# build game class instance and append
-			new_game = Game(this_prev_games, other_prev_games, n_prev_games,
-				inp_fields, inp_fields, out_fields, inp_avg, tar_data=game, axis=0)
+			new_game = Game(this_prev_games, other_prev_games, prm.n_prev_games,
+				inp_fields, inp_fields, out_fields, prm.inp_avg, tar_data=game, axis=0)
 			if (new_game.this_inp_data.shape[0] > 0 and 
 				new_game.other_inp_data.shape[0] > 0):
 				games.append(new_game)
@@ -247,47 +232,41 @@ def partition_data(games, inp, tar, train_pct=0.5):
 	return train, test
 
 
-def setup_network(train_data, hid_lyr=10, trainf=nl.train.train_gdm,
-	lyr=[nl.trans.SoftMax(),nl.trans.PureLin()], minmax=1.0, ibias=1.0):
+def setup_network(train_data, prm):
 	"""
 	train_data: used to set input and output layer sizes
-	hid_lyr:	size of the hidden network layer
-	trainf:		training function
-	lyr:		layer activation functions
+	prm:		paramters file
 	"""
 	lyr_rng = zip(train_data['inp'].min(axis=0), train_data['inp'].max(axis=0))
-	net = nl.net.newff(lyr_rng, [hid_lyr, train_data['tar'].shape[1]], lyr)
-	net.trainf = trainf
+	net = nl.net.newff(lyr_rng, [prm.hid_lyr, train_data['tar'].shape[1]], prm.lyr)
+	net.trainf = prm.trainf
 	for l in net.layers:
-		l.initf = nl.init.InitRand([-minmax, minmax], 'wb')
-	net.layers[0].np['b'][:] = 1.0
+		l.initf = nl.init.InitRand([-prm.minmax, prm.minmax], 'wb')
+	net.layers[0].np['b'][:] = prm.ibias
 	return net
 
 
-def train_network(net, train, test, lr=0.001, epochs=100, update_freq=20, show=20):
+def train_network(net, train, test, prm):
 	"""
 	Train neural network
-	net:			network to be trained
-	train:			training data
-	test:			validation data
-	lr:				learning rate
-	epochs:			training epochs
-	update_freq:	frequency which error is checked and outputted
-	show:			frequency which neurolab outputs training updates
+	net:	network to be trained
+	train:	training data
+	test:	validation data
+	prm:	paramters file
 	"""
 	error_test = []
 	error_train = []
 	msef = nl.error.MSE()
 	best_net = copy.deepcopy(net)
 	best_error = float('inf')
-	for i in range(epochs / update_freq):
-		error_tmp = net.train(train['inp'], train['tar'], epochs=update_freq,
-			show=show, lr=lr)
+	for i in range(prm.epochs / prm.update_freq):
+		error_tmp = net.train(train['inp'], train['tar'], epochs=prm.update_freq,
+			show=prm.show, lr=prm.lr)
 		error_train.append(msef(train['tar'], net.sim(train['inp'])))
 		error_test.append(msef(test['tar'], net.sim(test['inp'])))
 		if error_test[-1] < best_error:
 			best_net = copy.deepcopy(net)
-		print "Iters: {}".format(i*update_freq)
+		print "Iters: {}".format(i*prm.update_freq)
 		print "Train: {}".format(error_train[-1])
 		print " Test: {}".format(error_test[-1])
 	error = {}
