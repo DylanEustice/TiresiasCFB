@@ -52,9 +52,6 @@ class Params:
 		return [attr for attr in dir(self) if not attr.startswith("__")]
 
 
-
-
-
 class Game:
 	def __init__(self, this_inp_data, other_inp_data, n_prev, this_inp_fields,
 		other_inp_fields, out_fields, avg_inp_callback, tar_data=None, **kwargs):
@@ -113,6 +110,31 @@ class Game:
 	def avg_inp(self, use_this=True):
 		data = self.this_inp_data if use_this else self.other_inp_data
 		return self.avg_inp_f(data, **self.avg_inp_kwargs)
+
+
+def build_prms_file(prm_name, io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
+	hid_lyr=10, trainf=nl.train.train_gdm, lyr=[nl.trans.SoftMax(),nl.trans.PureLin()],
+	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0,
+	ibias=1.0, inp_avg=np.mean):
+	"""
+	Build Params object and save to file
+	"""
+	prms = Params(io_name, io_dir, n_prev_games, min_date, trainf, lyr,
+		train_pct, lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg)
+	with open(os.path.join(PRM_DIR, prm_name), 'w') as f:
+		pickle.dump(prms, f)
+
+
+def train_net_from_prms(prm_name):
+	"""
+	Load .prm file and train network based on those parameters
+	"""
+	p = Params.load(prm_name)
+	net = train_net_from_scratch(p.io_name, io_dir=p.io_dir, n_prev_games=p.n_prev_games,
+		min_date=p.min_date, hid_lyr=p.hid_lyr, trainf=p.trainf, lyr=p.lyr,
+		train_pct=p.train_pct, lr=p.lr, epochs=p.epochs, update_freq=p.update_freq,
+		show=p.show, minmax=p.minmax, ibias=p.ibias, inp_avg=p.inp_avg)
+	return net
 
 
 def train_net_from_scratch(io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,

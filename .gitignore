@@ -4,6 +4,7 @@
 *.csv
 *.df
 *.pkl
+*.prm
 
 # Python compile files
 *.pyc
