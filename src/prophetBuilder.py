@@ -14,8 +14,8 @@ PRM_DIR = os.path.join('data', 'network_params')
 
 
 class Params:
-	def __init__(self, io_name, io_dir, n_prev_games, min_date, trainf, lyr,
-		train_pct, lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg):
+	def __init__(self, io_name, io_dir, n_prev_games, min_date, trainf, lyr, train_pct,
+		lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func):
 		self.io_name = io_name
 		self.io_dir = io_dir
 		self.n_prev_games = n_prev_games
@@ -31,10 +31,11 @@ class Params:
 		self.hid_lyr = hid_lyr
 		self.ibias = ibias
 		self.inp_avg = inp_avg
+		self.norm_func = norm_func
 
 	@classmethod
 	def load(prms, fname, fdir=PRM_DIR):
-		this = prms(*[None]*15)
+		this = prms(*[None]*16)
 		with open(os.path.join(fdir, fname),"r") as f:
 			this = pickle.load(f)
 		return this
@@ -115,38 +116,60 @@ class Game:
 def build_prms_file(prm_name, io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
 	hid_lyr=10, trainf=nl.train.train_gdm, lyr=[nl.trans.SoftMax(),nl.trans.PureLin()],
 	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0,
-	ibias=1.0, inp_avg=np.mean):
+	ibias=1.0, inp_avg=np.mean, norm_func=normalize_data):
 	"""
 	Build Params object and save to file
 	"""
-	prms = Params(io_name, io_dir, n_prev_games, min_date, trainf, lyr,
-		train_pct, lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg)
+	prms = Params(io_name, io_dir, n_prev_games, min_date, trainf, lyr, train_pct,
+		lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func)
 	with open(os.path.join(PRM_DIR, prm_name), 'w') as f:
 		pickle.dump(prms, f)
 
 
-def train_net_from_prms(prm_name, norm_func=normalize_data):
+def train_net_from_prms(prm_name, data_file=None, fdir=DATA_DIR):
 	"""
 	Load .prm file and train network based on those parameters
 	"""
 	prm = Params.load(prm_name)
-	net = train_net_from_scratch(prm, norm_func)
-	return net
+	if data_file is None:
+		# Build data and train
+		net, part_data, error = train_net_from_scratch(prm)
+		# Save if desired
+		fname = raw_input('Save built data? Enter N or file name (*.pkl): ')
+		if fname != 'N':
+			with open(os.path.join(fdir, fname), 'w') as f:
+				pickle.dump(part_data, f)
+	else:
+		# Read data and train
+		with open(os.path.join(fdir, data_file), 'r') as f:
+			part_data = pickle.load(f)
+		net, error = train_net_given_data(prm, part_data)
+	return net, part_data, error
 
 
-def train_net_from_scratch(prm, norm_func=normalize_data):
+def train_net_from_scratch(prm):
 	"""
 	Setup data, setup network, and train network given inputs
 	"""
-	data = setup_train_data(prm, norm_func)
-	train, test = partition_data(data['games'], data['norm_inp'],
-		data['norm_tar'], train_pct=prm.train_pct)
-	net = setup_network(train, prm)
-	net, error = train_network(net, train, test, prm)
-	return net, data, train, test, error
+	# Get data
+	all_data = setup_train_data(prm)
+	# Partition data
+	part_data = partition_data(all_data, train_pct=prm.train_pct)
+	net = setup_network(part_data['train'], prm)
+	net, error = train_network(net, part_data, prm)
+	return net, part_data, error
 
 
-def setup_train_data(prm, norm_func=normalize_data):
+def train_net_given_data(prm, part_data):
+	"""
+	Setup network and train network given inputs
+	"""
+	net = setup_network(part_data['train'], prm)
+	net, error = train_network(net, part_data, prm)
+	return net, error
+
+
+def setup_train_data(prm):
 	"""
 	prm: paramters file
 	"""
@@ -155,9 +178,10 @@ def setup_train_data(prm, norm_func=normalize_data):
 	raw_inp = np.vstack([g.inp_data for g in games])
 	raw_tar = np.vstack([g.tar_data for g in games])
 	# standardize data
-	norm_inp = norm_func(raw_inp.astype('double'))
-	norm_tar = norm_func(raw_tar.astype('double'))
+	norm_inp = prm.norm_func(raw_inp.astype('double'))
+	norm_tar = prm.norm_func(raw_tar.astype('double'))
 	out_data = {}
+	out_data['norm_func'] = str(prm.norm_func)
 	out_data['games'] = games
 	out_data['norm_inp'] = norm_inp
 	out_data['norm_tar'] = norm_tar
@@ -210,26 +234,31 @@ def build_data(prm):
 	return games
 
 
-def partition_data(games, inp, tar, train_pct=0.5):
+def partition_data(data, train_pct=0.5):
 	"""
 	Randomly partition games for training and validation
 	games:		list of games to be partitioned
-	inp:		input data
-	tar:		target data
+	data:		input/target raw/normalized data
 	train_pct:	percentage of data used for training
 	"""
+	games = data['games']
 	gids = list(set(g.id for g in games))
 	rnd_vec = np.random.random(len(gids))
 	train_idx = rnd_vec < train_pct
 	train_gids = {id_ for i, id_ in enumerate(gids) if train_idx[i]}
 	# partition
 	train = {}
-	train['inp'] = inp[np.array([g.id in train_gids for g in games]),:]
-	train['tar'] = tar[np.array([g.id in train_gids for g in games]),:]
+	train['norm_inp'] = data['norm_inp'][np.array([g.id in train_gids for g in games]),:]
+	train['norm_tar'] = data['norm_tar'][np.array([g.id in train_gids for g in games]),:]
+	train['raw_inp'] = data['raw_inp'][np.array([g.id in train_gids for g in games]),:]
+	train['raw_tar'] = data['raw_tar'][np.array([g.id in train_gids for g in games]),:]
 	test = {}
-	test['inp'] = inp[np.array([g.id not in train_gids for g in games]),:]
-	test['tar'] = tar[np.array([g.id not in train_gids for g in games]),:]
-	return train, test
+	test['norm_inp'] = data['norm_inp'][np.array([g.id not in train_gids for g in games]),:]
+	test['norm_tar'] = data['norm_tar'][np.array([g.id not in train_gids for g in games]),:]
+	test['raw_inp'] = data['raw_inp'][np.array([g.id not in train_gids for g in games]),:]
+	test['raw_tar'] = data['raw_tar'][np.array([g.id not in train_gids for g in games]),:]
+	out_data = {'train': train, 'test': test}
+	return out_data
 
 
 def setup_network(train_data, prm):
@@ -237,8 +266,8 @@ def setup_network(train_data, prm):
 	train_data: used to set input and output layer sizes
 	prm:		paramters file
 	"""
-	lyr_rng = zip(train_data['inp'].min(axis=0), train_data['inp'].max(axis=0))
-	net = nl.net.newff(lyr_rng, [prm.hid_lyr, train_data['tar'].shape[1]], prm.lyr)
+	lyr_rng = zip(train_data['norm_inp'].min(axis=0), train_data['norm_inp'].max(axis=0))
+	net = nl.net.newff(lyr_rng, [prm.hid_lyr, train_data['norm_tar'].shape[1]], prm.lyr)
 	net.trainf = prm.trainf
 	for l in net.layers:
 		l.initf = nl.init.InitRand([-prm.minmax, prm.minmax], 'wb')
@@ -246,24 +275,25 @@ def setup_network(train_data, prm):
 	return net
 
 
-def train_network(net, train, test, prm):
+def train_network(net, data, prm):
 	"""
 	Train neural network
 	net:	network to be trained
-	train:	training data
-	test:	validation data
+	data:	training and testing data
 	prm:	paramters file
 	"""
+	train = data['train']
+	test = data['test']
 	error_test = []
 	error_train = []
 	msef = nl.error.MSE()
 	best_net = copy.deepcopy(net)
 	best_error = float('inf')
 	for i in range(prm.epochs / prm.update_freq):
-		error_tmp = net.train(train['inp'], train['tar'], epochs=prm.update_freq,
+		error_tmp = net.train(train['norm_inp'], train['norm_tar'], epochs=prm.update_freq,
 			show=prm.show, lr=prm.lr)
-		error_train.append(msef(train['tar'], net.sim(train['inp'])))
-		error_test.append(msef(test['tar'], net.sim(test['inp'])))
+		error_train.append(msef(train['norm_tar'], net.sim(train['norm_inp'])))
+		error_test.append(msef(test['norm_tar'], net.sim(test['norm_inp'])))
 		if error_test[-1] < best_error:
 			best_net = copy.deepcopy(net)
 		print "Iters: {}".format(i*prm.update_freq)
@@ -284,16 +314,16 @@ def plot_data(net, error, train, test, alpha=0.1):
 	x = range(len(error['train']))
 	plt.plot(x, error['train'], x, error['test'])
 	fig = plt.figure()
-	out = (net.sim(train['inp']), net.sim(test['inp']))
-	idx = (np.argsort(np.ndarray.flatten(train['tar'])), 
-		   np.argsort(np.ndarray.flatten(test['tar'])))
+	out = (net.sim(train['norm_inp']), net.sim(test['norm_inp']))
+	idx = (np.argsort(np.ndarray.flatten(train['norm_tar'])), 
+		   np.argsort(np.ndarray.flatten(test['norm_tar'])))
 	ax1 = fig.add_subplot(121)
 	ax2 = fig.add_subplot(122)
 	# train
-	ax1.plot(np.ndarray.flatten(train['tar'])[idx[0]], 'o', alpha=alpha)
+	ax1.plot(np.ndarray.flatten(train['norm_tar'])[idx[0]], 'o', alpha=alpha)
 	ax1.plot(np.ndarray.flatten(out[0])[idx[0]], 'o', alpha=alpha)
 	# test
-	ax2.plot(np.ndarray.flatten(test['tar'])[idx[1]], 'o', alpha=alpha)
+	ax2.plot(np.ndarray.flatten(test['norm_tar'])[idx[1]], 'o', alpha=alpha)
 	ax2.plot(np.ndarray.flatten(out[1])[idx[1]], 'o', alpha=alpha)
 
 
