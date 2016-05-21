@@ -126,11 +126,13 @@ def build_prms_file(prm_name, io_name, io_dir=IO_DIR, n_prev_games=6, min_date=N
 		pickle.dump(prms, f)
 
 
-def train_net_from_prms(prm_name, data_file=None, fdir=DATA_DIR):
+def train_net_from_prms(prm=None, prm_name=None, data_file=None, fdir=DATA_DIR):
 	"""
 	Load .prm file and train network based on those parameters
 	"""
-	prm = Params.load(prm_name)
+	if prm is None:
+		assert(prm_name is not None)
+		prm = Params.load(prm_name)
 	if data_file is None:
 		# Build data and train
 		net, part_data, error = train_net_from_scratch(prm)
@@ -266,7 +268,7 @@ def setup_network(train_data, prm):
 	train_data: used to set input and output layer sizes
 	prm:		paramters file
 	"""
-	lyr_rng = zip(train_data['norm_inp'].min(axis=0), train_data['norm_inp'].max(axis=0))
+	lyr_rng = zip(1.1*train_data['norm_inp'].min(axis=0), train_data['norm_inp'].max(axis=0))
 	net = nl.net.newff(lyr_rng, [prm.hid_lyr, train_data['norm_tar'].shape[1]], prm.lyr)
 	net.trainf = prm.trainf
 	for l in net.layers:
