@@ -296,7 +296,7 @@ def train_network(net, data, prm):
 		error_test.append(msef(test['norm_tar'], net.sim(test['norm_inp'])))
 		if error_test[-1] < best_error:
 			best_net = copy.deepcopy(net)
-		print "Iters: {}".format(i*prm.update_freq)
+		print "Iters: {} / {}".format(i*prm.update_freq, prm.epochs)
 		print "Train: {}".format(error_train[-1])
 		print " Test: {}".format(error_test[-1])
 	error = {}
