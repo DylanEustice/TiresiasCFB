@@ -268,7 +268,7 @@ def setup_network(train_data, prm):
 	train_data: used to set input and output layer sizes
 	prm:		paramters file
 	"""
-	lyr_rng = zip(1.1*train_data['norm_inp'].min(axis=0), train_data['norm_inp'].max(axis=0))
+	lyr_rng = zip(train_data['norm_inp'].min(axis=0), train_data['norm_inp'].max(axis=0))
 	net = nl.net.newff(lyr_rng, [prm.hid_lyr, train_data['norm_tar'].shape[1]], prm.lyr)
 	net.trainf = prm.trainf
 	for l in net.layers:

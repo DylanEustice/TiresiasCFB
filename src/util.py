@@ -140,3 +140,12 @@ def idv_out_mse(out, tar):
 	"""
 	diff = out - tar
 	return np.mean(np.power(diff, 2), axis=0)
+
+
+def idv_out_bias(out, tar):
+	"""
+	Return an array of the bias for each individual output
+	"""
+	diff = out - tar
+	return np.mean(diff, axis=0)
+	
