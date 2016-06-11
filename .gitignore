@@ -6,6 +6,9 @@
 *.pkl
 *.prm
 
+# Sublime project files
+*.sublime*
+
 # Python compile files
 *.pyc
 
