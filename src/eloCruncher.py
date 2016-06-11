@@ -13,12 +13,6 @@ class Team:
 		self.games = games
 		self.scores = np.array([games['this_Score'], games['other_Score']])
 		self.game_idx = np.array(games['Id'])
-		self.elo = np.zeros(self.scores.shape[1])
-		self.avg_elo = 0
-
-	def init_elo(self, avg_elo):
-		self.avg_elo = avg_elo
-		self.elo += avg_elo
 
 	def get_game(self, gid):
 		if gid in self.game_idx:
