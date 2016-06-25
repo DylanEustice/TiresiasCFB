@@ -3,6 +3,7 @@ import re
 from src.util import load_json, dump_json, grab_scraper_data, debug_assert
 import pandas as pd
 import csv
+import datetime
 
 
 this_year = 2016
@@ -256,6 +257,9 @@ def team_boxscore_to_array(team, team_id):
 					# set data
 					try:
 						box_dict[key] = tmp_data[data_key]
+						if key == 'Date' or key == 'DateUtc':
+							format = '%Y-%m-%d %H:%M'
+							box_dict[key] = datetime.datetime.strptime(box_dict[key], format)
 					except KeyError:
 						box_dict[key] = '-'
 			# Add game Series to DataFrame
