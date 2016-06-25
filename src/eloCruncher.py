@@ -62,7 +62,7 @@ def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
 	return Ri + K * MoV_adj * MoV_mult
 
 
-def run_all_elos(teams, init_elo=1000, A=2.2, B=2.2, C=0.001, K=20):
+def run_all_elos(teams, init_elo=1000, A=2.2, B=4.0, C=0.001, K=20):
 	"""
 	"""
 	# First interleave all games, sorting by date
