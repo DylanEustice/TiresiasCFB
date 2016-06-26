@@ -62,40 +62,44 @@ def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
 	return Ri + K * MoV_adj * MoV_mult
 
 
-def run_all_elos(teams, init_elo=1000, A=2.2, B=4.0, C=0.001, K=20):
+def run_all_elos(all_data, init_elo=1000, A=4.0, B=4.0, C=0.001, K=20):
 	"""
 	"""
-	# First interleave all games, sorting by date
-	shf_dates = np.concatenate([t.dates for t in teams])
-	date_idx = np.argsort(shf_dates)
-	dates = np.array([datetime.datetime.strptime(dt, '%Y-%m-%d %H:%M') for dt in shf_dates[date_idx]])
-	dates_diff = np.array([(dates[i+1]-dates[i]).total_seconds() for i in range(dates.shape[0]-1)])
+	# Sort unique game ids by date
+	gids, ix_gids = np.unique(all_data['Id'], return_index=True)
+	ix_date = np.argsort(np.array(all_data['DateUtc'])[ix_gids])
+	gids = gids[ix_date]
+	data = np.array([all_data['Id'], all_data['this_TeamId'], all_data['other_TeamId'],
+		all_data['this_Score'], all_data['other_Score']])
+	# Find time between games
+	dates = np.array([d for d in all_data['DateUtc']])[ix_gids][ix_date]
+	dates_diff = np.array([(dates[i+1]-dates[i]).total_seconds() for i in range(len(dates)-1)])
 	dates_diff /= (60*60*24)
-	scores = np.concatenate([t.scores for t in teams], axis=1)[:,date_idx]
-	gids = np.concatenate([t.gids for t in teams])[date_idx]
-	tids = np.concatenate([t.tids for t in teams], axis=1)[:,date_idx]
 	# Set up elo dictionary
+	tids = np.unique(all_data['this_TeamId'])
 	elo_dict = {}
-	for t in teams:
-		elo_dict[t.tid] = []
-		elo_dict[t.tid].append(init_elo)
+	for tid in tids:
+		elo_dict[tid] = []
+		elo_dict[tid].append(init_elo)
 	# Walk though games
 	for i, gid in enumerate(gids):
 		# Check for season gap (100 days)
 		if dates_diff[i-1] > 100:
 			for id_, elo in elo_dict.iteritems():
 				elo_dict[id_][-1] += (init_elo - elo_dict[id_][-1]) / 2
+		# Find game
+		game = data[:,data[0,:]==gid]
+		assert(game.shape[1] == 2)
+		assert(game[1,:1] == game[2,1] and game[1,1] == game[2,0])
 		# Recalculate Elos with results of game
-		MoV = scores[0,i] - scores[1,i]
+		MoV = -np.diff(game[3:,:])
+		assert(MoV[0,0] == -MoV[1,0])
 		# Get team's and their information
-		home_team = teams[teams.index(tids[0,i])]
-		away_team = teams[teams.index(tids[1,i])]
-		home_elo = elo_dict[home_team.tid][-1]
-		away_elo = elo_dict[away_team.tid][-1]
+		elos = [elo_dict[tid][-1] for tid in game[1,:]]
 		# Calculate parameters based on results
-		elo_diff = home_elo - away_elo if MoV > 0 else away_elo - home_elo
-		new_home_elo = rating_adjuster(home_elo, A, B, C, K, elo_diff, MoV)
-		new_away_elo = rating_adjuster(away_elo, A, B, C, K, elo_diff, -MoV)
+		elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
+		new_elos = [rating_adjuster(elos[i], A, B, C, K, elo_diff, MoV[i,0]) for i in range(2)]
 		# Save
-		elo_dict[home_team.tid].append(new_home_elo)
-		elo_dict[away_team.tid].append(new_away_elo)
+		elo_dict[game[1,0]].append(new_elos[0])
+		elo_dict[game[1,1]].append(new_elos[1])
+	return elo_dict
