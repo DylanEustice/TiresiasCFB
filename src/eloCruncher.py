@@ -47,7 +47,7 @@ def build_all_teams():
 	return teams
 
 
-def tally_elo_accuracy(elo_dict, teamgid_map, games, dates_diff, min_season=1):
+def tally_elo_accuracy(elo_dict, teamgid_map, games, dates_diff, min_season=1, do_print=True):
 	"""
 	"""
 	tallies = [[],[]] # 0: correct, 1: incorrect
@@ -74,7 +74,33 @@ def tally_elo_accuracy(elo_dict, teamgid_map, games, dates_diff, min_season=1):
 			add_pr = min(pr) if correct else max(pr)
 			tallies[ixTally].append(add_pr)
 			pr_result.append((maxPr, correct))
-	return tallies, pr_result
+	tally_diff = abs(np.sum(tallies[0]) - np.sum(tallies[1]))/np.sum(tallies[0]+tallies[1])
+	if do_print:
+		pct_correct = 100.*len(tallies[0]) / len(tallies[0] + tallies[1])
+		pct_diff = 100. * tally_diff
+		print "Prediction Correct: {:3.2f} %".format(pct_correct)
+		print "  Tally Difference: {:0.2f} %".format(pct_diff)
+	return tallies, pr_result, tally_diff
+
+
+def plt_pr_result_hist(pr_result, nBins=6, ax=None, **kwargs):
+	"""
+	"""
+	bins = np.linspace(0.5,1.0,nBins)
+	to_hist = []
+	for i in range(nBins-1):
+		ix = [j for j,pr in enumerate(pr_result) if bins[i] <= pr[0] < bins[i+1]]
+		nCorrect = len([j for j in ix if pr_result[j][1]])
+		pct_correct = 100. * nCorrect / len(ix)
+		to_hist.append(pct_correct)
+	if ax is None:
+		fig = plt.figure()
+		ax = fig.add_subplot(111)
+	bin_width = bins[1] - bins[0]
+	bins = bins[:-1] + bin_width / 2
+	ax.bar(bins, to_hist, width=bin_width, **kwargs)
+	ax.grid()
+	return ax
 
 
 def elo_win_prob(elos, div=400):
@@ -101,7 +127,8 @@ def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
 	return Ri + K * MoV_adj * MoV_mult
 
 
-def run_all_elos(games=[], dates_diff=[], init_elo=1000, A=4.0, B=4.0, C=0.001, K=20):
+def run_all_elos(games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
+	season_regress=0.5, init_elo=1000):
 	"""
 	"""
 	if len(games) == 0 or len(dates_diff) == 0:
@@ -125,7 +152,8 @@ def run_all_elos(games=[], dates_diff=[], init_elo=1000, A=4.0, B=4.0, C=0.001, 
 			for id_, elo in elo_dict.iteritems():
 				curr_elo = elo_dict[id_][-1][-1]
 				elo_dict[id_].append([])
-				elo_dict[id_][ixSeason].append(curr_elo + 0.5*(init_elo - curr_elo))
+				start_elo = curr_elo + season_regress*(init_elo - curr_elo)
+				elo_dict[id_][ixSeason].append(start_elo)
 				teamgid_map[id_].append([])
 		# Recalculate Elos with results of game
 		MoV = -np.diff(game[3:,:])
