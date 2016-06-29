@@ -60,6 +60,16 @@ def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
 	return Ri + K * MoV_adj * MoV_mult
 
 
+def elo_win_prob(elos, div=400):
+	"""
+	Given elo ratings of teams A and B, calculate their probabilities of winning
+	"""
+	Pr_A = 1 / (10**( -1.*(elos[0]-elos[1])/div ) + 1)
+	Pr_B = 1 / (10**( -1.*(elos[1]-elos[0])/div ) + 1)
+	assert(Pr_A+Pr_B==1)
+	return (Pr_A, Pr_B)
+
+
 def run_all_elos(games=[], dates_diff=[], init_elo=1000, A=4.0, B=4.0, C=0.001, K=20):
 	"""
 	"""
