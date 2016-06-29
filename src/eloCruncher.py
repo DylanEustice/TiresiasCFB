@@ -86,28 +86,30 @@ def run_all_elos(games=[], dates_diff=[], init_elo=1000, A=4.0, B=4.0, C=0.001, 
 		teamgid_map[tid] = []
 		teamgid_map[tid].append([])
 	# Walk though games
+	ixSeason = 0
 	for i, game in enumerate(games):
 		# Check for season gap (100 days)
 		if i > 0 and dates_diff[i-1] > 100:
+			ixSeason += 1
 			for id_, elo in elo_dict.iteritems():
 				curr_elo = elo_dict[id_][-1][-1]
 				elo_dict[id_].append([])
-				elo_dict[id_][-1].append(curr_elo + 0.5*(init_elo - curr_elo))
+				elo_dict[id_][ixSeason].append(curr_elo + 0.5*(init_elo - curr_elo))
 				teamgid_map[id_].append([])
 		# Recalculate Elos with results of game
 		MoV = -np.diff(game[3:,:])
 		assert(MoV[0,0] == -MoV[1,0])
 		# Get team's and their information
-		elos = [elo_dict[tid][-1][-1] for tid in game[1,:]]
+		elos = [elo_dict[tid][ixSeason][-1] for tid in game[1,:]]
 		# Calculate parameters based on results
 		elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
 		new_elos = [rating_adjuster(elos[i], A, B, C, K, elo_diff, MoV[i,0]) for i in range(2)]
 		assert(round(sum(elos),3) == round(sum(new_elos),3))
 		# Save
-		elo_dict[game[1,0]][-1].append(new_elos[0])
-		elo_dict[game[1,1]][-1].append(new_elos[1])
-		teamgid_map[game[1,0]][-1].append(game[0,0])
-		teamgid_map[game[1,1]][-1].append(game[0,1])
+		elo_dict[game[1,0]][ixSeason].append(new_elos[0])
+		elo_dict[game[1,1]][ixSeason].append(new_elos[1])
+		teamgid_map[game[1,0]][ixSeason].append(game[0,0])
+		teamgid_map[game[1,1]][ixSeason].append(game[0,1])
 	return elo_dict, teamgid_map, games
 
 
