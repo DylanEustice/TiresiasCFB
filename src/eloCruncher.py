@@ -47,17 +47,34 @@ def build_all_teams():
 	return teams
 
 
-def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
+def tally_elo_accuracy(elo_dict, teamgid_map, games, dates_diff, min_season=1):
 	"""
-	Adjust a team's Elo rating based on the outcome of the game
-	A, B, C, K:	Parameters
-	Ri:			Initial elo rating
-	MoV:		Margin of victory (this_score - other_score)
-	elo_diff:	Elo delta (elo_winner - elo_loser)
 	"""
-	MoV_mult = A / (B + C * elo_diff)
-	MoV_adj = np.sign(MoV) * np.log(np.abs(MoV) + 1)
-	return Ri + K * MoV_adj * MoV_mult
+	tallies = [[],[]] # 0: correct, 1: incorrect
+	pr_result = [] # (Pr_win, correct)
+	ixSeason = 0
+	for i, game in enumerate(games):
+		# Check for season gap (100 days)
+		if i > 0 and dates_diff[i-1] > 100:
+			ixSeason += 1
+		# Don't do this for first min_season seasons
+		if ixSeason >= min_season:
+			# Get team's and their information
+			gid = game[0,0]
+			tids = [tid for tid in game[1,:]]
+			ixGames = [teamgid_map[tid][ixSeason].index(gid) for tid in tids]
+			elos = [elo_dict[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
+			# Determine win probabilities and winner
+			pr = elo_win_prob(elos)
+			maxPr = max(pr)
+			ixWin = np.argmax(game[3,:])
+			correct = np.argmax(elos) == ixWin
+			# Append probability of loss if correct, else probability of win
+			ixTally = 0 if correct else 1
+			add_pr = min(pr) if correct else max(pr)
+			tallies[ixTally].append(add_pr)
+			pr_result.append((maxPr, correct))
+	return tallies, pr_result
 
 
 def elo_win_prob(elos, div=400):
@@ -66,8 +83,22 @@ def elo_win_prob(elos, div=400):
 	"""
 	Pr_A = 1 / (10**( -1.*(elos[0]-elos[1])/div ) + 1)
 	Pr_B = 1 / (10**( -1.*(elos[1]-elos[0])/div ) + 1)
-	assert(Pr_A+Pr_B==1)
+	assert(round(Pr_A+Pr_B,6) == 1)
 	return (Pr_A, Pr_B)
+
+
+def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
+	"""
+	Adjust a team's Elo rating based on the outcome of the game
+	A, B, C, K:	Parameters
+	Ri:			Initial elo rating
+	MoV:		Margin of victory (this_score - other_score)
+	elo_diff:	Elo delta (elo_winner - elo_loser)
+	"""
+	assert(B > C * elo_diff)
+	MoV_mult = A / (B + C * elo_diff)
+	MoV_adj = np.sign(MoV) * np.log(np.abs(MoV) + 1)
+	return Ri + K * MoV_adj * MoV_mult
 
 
 def run_all_elos(games=[], dates_diff=[], init_elo=1000, A=4.0, B=4.0, C=0.001, K=20):
