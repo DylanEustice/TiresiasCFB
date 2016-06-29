@@ -78,18 +78,22 @@ def run_all_elos(games=[], dates_diff=[], init_elo=1000, A=4.0, B=4.0, C=0.001, 
 	# Set up elo dictionary
 	tids = np.unique(all_data['this_TeamId'])
 	elo_dict = {}
+	teamgid_map = {}
 	for tid in tids:
 		elo_dict[tid] = []
 		elo_dict[tid].append([])
 		elo_dict[tid][-1].append(init_elo)
+		teamgid_map[tid] = []
+		teamgid_map[tid].append([])
 	# Walk though games
 	for i, game in enumerate(games):
 		# Check for season gap (100 days)
-		if dates_diff[i-1] > 100:
+		if i > 0 and dates_diff[i-1] > 100:
 			for id_, elo in elo_dict.iteritems():
 				curr_elo = elo_dict[id_][-1][-1]
 				elo_dict[id_].append([])
 				elo_dict[id_][-1].append(curr_elo + 0.5*(init_elo - curr_elo))
+				teamgid_map[id_].append([])
 		# Recalculate Elos with results of game
 		MoV = -np.diff(game[3:,:])
 		assert(MoV[0,0] == -MoV[1,0])
@@ -102,7 +106,9 @@ def run_all_elos(games=[], dates_diff=[], init_elo=1000, A=4.0, B=4.0, C=0.001, 
 		# Save
 		elo_dict[game[1,0]][-1].append(new_elos[0])
 		elo_dict[game[1,1]][-1].append(new_elos[1])
-	return elo_dict
+		teamgid_map[game[1,0]][-1].append(game[0,0])
+		teamgid_map[game[1,1]][-1].append(game[0,1])
+	return elo_dict, teamgid_map, games
 
 
 def build_games():
