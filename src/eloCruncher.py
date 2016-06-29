@@ -33,10 +33,8 @@ def build_all_teams():
 	"""
 	Builds a list of teams (entries are Team class) for all compiled data
 	"""
-	# Load data then filter bad data and FCS games
-	all_data = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'all.df'))
-	all_data = all_data[all_data['this_Score'] != '-']
-	all_data = all_data[all_data['other_conferenceId'] != '-1']
+	# Load data
+	all_data = load_all_dataFrame()
 	# Load team info
 	teamid_dict = load_json('team_names.json', fdir='data')
 	teamids = sorted(set([tid for tid in all_data['this_TeamId']]))
@@ -62,9 +60,47 @@ def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
 	return Ri + K * MoV_adj * MoV_mult
 
 
-def run_all_elos(all_data, init_elo=1000, A=4.0, B=4.0, C=0.001, K=20):
+def run_all_elos(games=[], dates_diff=[], init_elo=1000, A=4.0, B=4.0, C=0.001, K=20):
 	"""
 	"""
+	if len(games) == 0 or len(dates_diff) == 0:
+		games, dates_diff = build_games()
+	# Set up elo dictionary
+	tids = np.unique(all_data['this_TeamId'])
+	elo_dict = {}
+	for tid in tids:
+		elo_dict[tid] = []
+		elo_dict[tid].append([])
+		elo_dict[tid][-1].append(init_elo)
+	# Walk though games
+	for i, game in enumerate(games):
+		# Check for season gap (100 days)
+		if dates_diff[i-1] > 100:
+			for id_, elo in elo_dict.iteritems():
+				curr_elo = elo_dict[id_][-1][-1]
+				elo_dict[id_].append([])
+				elo_dict[id_][-1].append(curr_elo + 0.5*(init_elo - curr_elo))
+		# Recalculate Elos with results of game
+		MoV = -np.diff(game[3:,:])
+		assert(MoV[0,0] == -MoV[1,0])
+		# Get team's and their information
+		elos = [elo_dict[tid][-1][-1] for tid in game[1,:]]
+		# Calculate parameters based on results
+		elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
+		new_elos = [rating_adjuster(elos[i], A, B, C, K, elo_diff, MoV[i,0]) for i in range(2)]
+		assert(round(sum(elos),3) == round(sum(new_elos),3))
+		# Save
+		elo_dict[game[1,0]][-1].append(new_elos[0])
+		elo_dict[game[1,1]][-1].append(new_elos[1])
+	return elo_dict
+
+
+def build_games():
+	"""
+	Build list of unique games and the date differences
+	"""
+	# Load data
+	all_data = load_all_dataFrame()
 	# Sort unique game ids by date
 	gids, ix_gids = np.unique(all_data['Id'], return_index=True)
 	ix_date = np.argsort(np.array(all_data['DateUtc'])[ix_gids])
@@ -75,31 +111,11 @@ def run_all_elos(all_data, init_elo=1000, A=4.0, B=4.0, C=0.001, K=20):
 	dates = np.array([d for d in all_data['DateUtc']])[ix_gids][ix_date]
 	dates_diff = np.array([(dates[i+1]-dates[i]).total_seconds() for i in range(len(dates)-1)])
 	dates_diff /= (60*60*24)
-	# Set up elo dictionary
-	tids = np.unique(all_data['this_TeamId'])
-	elo_dict = {}
-	for tid in tids:
-		elo_dict[tid] = []
-		elo_dict[tid].append(init_elo)
 	# Walk though games
+	games = []
 	for i, gid in enumerate(gids):
-		# Check for season gap (100 days)
-		if dates_diff[i-1] > 100:
-			for id_, elo in elo_dict.iteritems():
-				elo_dict[id_][-1] += (init_elo - elo_dict[id_][-1]) / 2
-		# Find game
 		game = data[:,data[0,:]==gid]
 		assert(game.shape[1] == 2)
 		assert(game[1,:1] == game[2,1] and game[1,1] == game[2,0])
-		# Recalculate Elos with results of game
-		MoV = -np.diff(game[3:,:])
-		assert(MoV[0,0] == -MoV[1,0])
-		# Get team's and their information
-		elos = [elo_dict[tid][-1] for tid in game[1,:]]
-		# Calculate parameters based on results
-		elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
-		new_elos = [rating_adjuster(elos[i], A, B, C, K, elo_diff, MoV[i,0]) for i in range(2)]
-		# Save
-		elo_dict[game[1,0]].append(new_elos[0])
-		elo_dict[game[1,1]].append(new_elos[1])
-	return elo_dict
+		games.append(game)
+	return games, dates_diff

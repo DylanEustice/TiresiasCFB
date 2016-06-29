@@ -51,6 +51,16 @@ def load_json(fname, fdir='.'):
 		return json.load(f)
 
 
+def load_all_dataFrame():
+	"""
+	Load data then filter bad data and FCS games
+	"""
+	all_data = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'all.df'))
+	all_data = all_data[all_data['this_Score'] != '-']
+	all_data = all_data[all_data['other_conferenceId'] != '-1']
+	return all_data
+
+
 def copy_dir(src, dst):
 	"""
 	Attempt to copy directory, on failure copy file. Will overwrite
