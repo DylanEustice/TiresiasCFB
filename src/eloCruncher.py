@@ -47,11 +47,11 @@ def build_all_teams():
 	return teams
 
 
-def tally_elo_accuracy(elo_dict, teamgid_map, games, dates_diff, min_season=1, do_print=True):
+def assess_elo_confidence(elo_dict, teamgid_map, games, dates_diff, min_season=1, do_print=True):
 	"""
 	"""
-	tallies = [[],[]] # 0: correct, 1: incorrect
 	pr_result = [] # (Pr_win, correct)
+	elo_diff = []
 	ixSeason = 0
 	for i, game in enumerate(games):
 		# Check for season gap (100 days)
@@ -65,22 +65,18 @@ def tally_elo_accuracy(elo_dict, teamgid_map, games, dates_diff, min_season=1, d
 			ixGames = [teamgid_map[tid][ixSeason].index(gid) for tid in tids]
 			elos = [elo_dict[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
 			# Determine win probabilities and winner
-			pr = elo_win_prob(elos)
-			maxPr = max(pr)
-			ixWin = np.argmax(game[3,:])
-			correct = np.argmax(elos) == ixWin
-			# Append probability of loss if correct, else probability of win
-			ixTally = 0 if correct else 1
-			add_pr = min(pr) if correct else max(pr)
-			tallies[ixTally].append(add_pr)
-			pr_result.append((maxPr, correct))
-	tally_diff = abs(np.sum(tallies[0]) - np.sum(tallies[1]))/np.sum(tallies[0]+tallies[1])
+			Pr_win = max(elo_win_prob(elos))
+			correct = np.argmax(elos) == np.argmax(game[3,:])
+			pr_result.append((Pr_win, correct))
+			elo_diff.append(abs(elos[0]-elos[1]))
 	if do_print:
-		pct_correct = 100.*len(tallies[0]) / len(tallies[0] + tallies[1])
-		pct_diff = 100. * tally_diff
+		nExp = sum([pr[0] for pr in pr_result])
+		nCorr = len([pr for pr in pr_result if pr[1]])
+		pct_correct = 100. * nCorr / len(pr_result)
+		pct_diff = 100. * (nExp - nCorr) / nExp
 		print "Prediction Correct: {:3.2f} %".format(pct_correct)
 		print "  Tally Difference: {:0.2f} %".format(pct_diff)
-	return tallies, pr_result, tally_diff
+	return pr_result, elo_diff
 
 
 def plt_pr_result_hist(pr_result, nBins=6, ax=None, **kwargs):
@@ -107,10 +103,30 @@ def elo_win_prob(elos, div=400):
 	"""
 	Given elo ratings of teams A and B, calculate their probabilities of winning
 	"""
-	Pr_A = 1 / (10**( -1.*(elos[0]-elos[1])/div ) + 1)
-	Pr_B = 1 / (10**( -1.*(elos[1]-elos[0])/div ) + 1)
+	Pr_A = Pr_elo(elos[0]-elos[1], div=div)
+	Pr_B = Pr_elo(elos[1]-elos[0], div=div)
 	assert(round(Pr_A+Pr_B,6) == 1)
 	return (Pr_A, Pr_B)
+
+
+def Pr_elo(elo_diff, div=400):
+	"""
+	Return the probability of a win given elo difference
+	"""
+	return 1 / (10**( -1.*(elo_diff)/div ) + 1)
+
+
+def stat_test(pr_result):
+	"""
+	Perform statistical test Bernoulli probability distribution
+	Y_i = 1 - p_i if success else -p_i
+	S = sum Y
+	std = sqrt(sum( p_i*(1 - p_i) ))
+	abs(S) / std <= 1.96 for 95% confidence on normal distribution
+	"""
+	Y = [1-p[0] if p[1] else -p[0] for p in pr_result]
+	stdev = sum(p[0]*(1-p[0]) for p in pr_result)**0.5
+	return abs(sum(Y)) / stdev
 
 
 def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
