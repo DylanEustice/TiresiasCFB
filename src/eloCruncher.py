@@ -129,6 +129,23 @@ def stat_test(pr_result):
 	return abs(sum(Y)) / stdev
 
 
+def t_test(pr_result, elo_diff):
+	"""
+	Given population of average elo advantage for winners who were favored,
+	determine how well calculated percentages matchup with reality
+	t = (X - mu) / (s / sqrt(N))
+	X: sample mean
+	mu: population mean
+	s: sample standard deviation
+	N: number of samples
+	"""
+	N = len(pr_result)
+	X = sum([ed for pr,ed in zip(pr_result, elo_diff) if pr[1]]) / N
+	mu = sum([x*Pr_elo(x) for x in elo_diff]) / N
+	s = np.std([ed for pr,ed in zip(pr_result, elo_diff) if pr[1]])
+	return (X-mu) / (s/N**0.5)
+
+
 def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
 	"""
 	Adjust a team's Elo rating based on the outcome of the game
