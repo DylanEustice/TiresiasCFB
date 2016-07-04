@@ -116,19 +116,6 @@ def Pr_elo(elo_diff, div=400):
 	return 1 / (10**( -1.*(elo_diff)/div ) + 1)
 
 
-def stat_test(pr_result):
-	"""
-	Perform statistical test Bernoulli probability distribution
-	Y_i = 1 - p_i if success else -p_i
-	S = sum Y
-	std = sqrt(sum( p_i*(1 - p_i) ))
-	abs(S) / std <= 1.96 for 95% confidence on normal distribution
-	"""
-	Y = [1-p[0] if p[1] else -p[0] for p in pr_result]
-	stdev = sum(p[0]*(1-p[0]) for p in pr_result)**0.5
-	return abs(sum(Y)) / stdev
-
-
 def t_test(pr_result, elo_diff):
 	"""
 	Given population of average elo advantage for winners who were favored,
