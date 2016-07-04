@@ -47,7 +47,19 @@ def build_all_teams():
 	return teams
 
 
-def assess_elo_confidence(elo_dict, teamgid_map, games, dates_diff, min_season=1, do_print=True):
+def elo_obj_fun(games, dates_diff, min_season=1, elo_type="winloss", **param_args):
+	"""
+	param_args: A, B, C, K, season_regress, init_elo
+	"""
+	elo_dict, teamgid_map, games = run_all_elos(games=games, dates_diff=dates_diff,
+		elo_type=elo_type, **param_args)
+	pr_result, elo_diff = assess_elo_confidence(elo_dict, teamgid_map, games, dates_diff,
+		min_season=min_season, do_print=False, elo_type=elo_type)
+	return abs(t_test(pr_result, elo_diff))
+
+
+def assess_elo_confidence(elo_dict, teamgid_map, games, dates_diff, min_season=1,
+	do_print=True, elo_type="winloss", avg_score=26.9):
 	"""
 	"""
 	pr_result = [] # (Pr_win, correct)
@@ -65,10 +77,21 @@ def assess_elo_confidence(elo_dict, teamgid_map, games, dates_diff, min_season=1
 			ixGames = [teamgid_map[tid][ixSeason].index(gid) for tid in tids]
 			elos = [elo_dict[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
 			# Determine win probabilities and winner
-			Pr_win = max(elo_win_prob(elos))
-			correct = np.argmax(elos) == np.argmax(game[3,:])
-			pr_result.append((Pr_win, correct))
-			elo_diff.append(abs(elos[0]-elos[1]))
+			if elo_type == "winloss":
+				Pr_win = max(elo_win_prob(elos))
+				correct = np.argmax(elos) == np.argmax(game[3,:])
+				pr_result.append((Pr_win, correct))
+				elo_diff.append(abs(elos[0]-elos[1]))
+			elif elo_type == "offdef":
+				# Do for each offense-defense matchup seperately
+				for j in range(2):
+					offdef_elos = [elos[j][0], elos[1-j][1]]
+					Pr_win = max(elo_win_prob(offdef_elos))
+					ixMax_elo = np.argmax(offdef_elos)
+					correct = ((ixMax_elo==1 and game[3,j] < avg_score) or
+							   (ixMax_elo==0 and game[3,j] >= avg_score))
+					pr_result.append((Pr_win, correct))
+					elo_diff.append(abs(offdef_elos[0]-offdef_elos[1]))
 	if do_print:
 		nExp = sum([pr[0] for pr in pr_result])
 		nCorr = len([pr for pr in pr_result if pr[1]])
@@ -87,7 +110,10 @@ def plt_pr_result_hist(pr_result, nBins=6, ax=None, **kwargs):
 	for i in range(nBins-1):
 		ix = [j for j,pr in enumerate(pr_result) if bins[i] <= pr[0] < bins[i+1]]
 		nCorrect = len([j for j in ix if pr_result[j][1]])
-		pct_correct = 100. * nCorrect / len(ix)
+		if len(ix) > 0:
+			pct_correct = 100. * nCorrect / len(ix)
+		else:
+			pct_correct = -1
 		to_hist.append(pct_correct)
 	if ax is None:
 		fig = plt.figure()
@@ -148,8 +174,9 @@ def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
 
 
 def run_all_elos(games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
-	season_regress=0.5, init_elo=1000):
+	season_regress=0.5, init_elo=1000, elo_type="winloss", avg_score=26.9):
 	"""
+	elo_type: "winloss", "offdef"
 	"""
 	if len(games) == 0 or len(dates_diff) == 0:
 		games, dates_diff = build_games()
@@ -160,7 +187,10 @@ def run_all_elos(games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
 	for tid in tids:
 		elo_dict[tid] = []
 		elo_dict[tid].append([])
-		elo_dict[tid][-1].append(init_elo)
+		if elo_type == "winloss":
+			elo_dict[tid][-1].append(init_elo)
+		elif elo_type == "offdef":
+			elo_dict[tid][-1].append((init_elo, init_elo))
 		teamgid_map[tid] = []
 		teamgid_map[tid].append([])
 	# Walk though games
@@ -172,19 +202,33 @@ def run_all_elos(games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
 			for id_, elo in elo_dict.iteritems():
 				curr_elo = elo_dict[id_][-1][-1]
 				elo_dict[id_].append([])
-				start_elo = curr_elo + season_regress*(init_elo - curr_elo)
+				if elo_type == "winloss":
+					start_elo = curr_elo + season_regress*(init_elo - curr_elo)
+				elif elo_type == "offdef":
+					start_elo = tuple(e + season_regress*(init_elo - e) for e in curr_elo)
 				elo_dict[id_][ixSeason].append(start_elo)
 				teamgid_map[id_].append([])
 		# Recalculate Elos with results of game
-		MoV = -np.diff(game[3:,:])
-		assert(MoV[0,0] == -MoV[1,0])
+		if elo_type == "winloss":
+			MoV = -np.diff(game[3:,:])
+			assert(MoV[0,0] == -MoV[1,0])
+		elif elo_type == "offdef":
+			MoV = game[3,:] - avg_score
 		# Get team's and their information
 		elos = [elo_dict[tid][ixSeason][-1] for tid in game[1,:]]
 		# Calculate parameters based on results
-		elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
-		new_elos = [rating_adjuster(elos[i], A, B, C, K, elo_diff, MoV[i,0]) for i in range(2)]
-		assert(round(sum(elos),3) == round(sum(new_elos),3))
-		# Save
+		if elo_type == "winloss":
+			elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
+			new_elos = [rating_adjuster(elos[j], A, B, C, K, elo_diff, MoV[j,0]) for j in range(2)]
+			assert(round(sum(elos),3) == round(sum(new_elos),3))
+		elif elo_type == "offdef":
+			elo_diff = [elos[j][0] - elos[1-j][1] if MoV[j] > 0 else
+						elos[1-j][1] - elos[j][0] for j in range(2)]
+			new_elos = [(0,0),(0,0)]
+			new_elos[0] = (rating_adjuster(elos[0][0], A, B, C, K, elo_diff[0], MoV[0]),
+						   rating_adjuster(elos[0][1], A, B, C, K, elo_diff[1], -MoV[1]))
+			new_elos[1] = (rating_adjuster(elos[1][0], A, B, C, K, elo_diff[1], MoV[1]),
+						   rating_adjuster(elos[1][1], A, B, C, K, elo_diff[0], -MoV[0]))
 		elo_dict[game[1,0]][ixSeason].append(new_elos[0])
 		elo_dict[game[1,1]][ixSeason].append(new_elos[1])
 		teamgid_map[game[1,0]][ixSeason].append(game[0,0])
