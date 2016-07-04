@@ -99,7 +99,7 @@ def plt_pr_result_hist(pr_result, nBins=6, ax=None, **kwargs):
 	return ax
 
 
-def elo_win_prob(elos, div=400):
+def elo_game_probs(elos, div=400):
 	"""
 	Given elo ratings of teams A and B, calculate their probabilities of winning
 	"""
