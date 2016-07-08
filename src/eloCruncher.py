@@ -47,12 +47,16 @@ def build_all_teams():
 	return teams
 
 
-def elo_obj_fun(games, dates_diff, min_season=1, elo_type="winloss", **param_args):
+def elo_obj_fun(params, all_data, games, dates_diff, min_season=1, elo_type="winloss"):
 	"""
-	param_args: A, B, C, K, season_regress, init_elo
+	params: A, B, C, K, season_regress, init_elo
 	"""
-	elo_dict, teamgid_map, games = run_all_elos(games=games, dates_diff=dates_diff,
-		elo_type=elo_type, **param_args)
+	A, B, C, K, season_regress, init_elo = params
+	if K <= 1e-6:
+		return np.inf
+	elo_dict, teamgid_map, games = run_all_elos(all_data, games=games,
+		dates_diff=dates_diff, elo_type=elo_type, A=A, B=B, C=C, K=K,
+		season_regress=season_regress, init_elo=init_elo)
 	pr_result, elo_diff = assess_elo_confidence(elo_dict, teamgid_map, games, dates_diff,
 		min_season=min_season, do_print=False, elo_type=elo_type)
 	return abs(t_test(pr_result, elo_diff))
@@ -78,7 +82,7 @@ def assess_elo_confidence(elo_dict, teamgid_map, games, dates_diff, min_season=1
 			elos = [elo_dict[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
 			# Determine win probabilities and winner
 			if elo_type == "winloss":
-				Pr_win = max(elo_win_prob(elos))
+				Pr_win = max(elo_game_probs(elos))
 				correct = np.argmax(elos) == np.argmax(game[3,:])
 				pr_result.append((Pr_win, correct))
 				elo_diff.append(abs(elos[0]-elos[1]))
@@ -86,7 +90,7 @@ def assess_elo_confidence(elo_dict, teamgid_map, games, dates_diff, min_season=1
 				# Do for each offense-defense matchup seperately
 				for j in range(2):
 					offdef_elos = [elos[j][0], elos[1-j][1]]
-					Pr_win = max(elo_win_prob(offdef_elos))
+					Pr_win = max(elo_game_probs(offdef_elos))
 					ixMax_elo = np.argmax(offdef_elos)
 					correct = ((ixMax_elo==1 and game[3,j] < avg_score) or
 							   (ixMax_elo==0 and game[3,j] >= avg_score))
@@ -173,7 +177,7 @@ def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
 	return Ri + K * MoV_adj * MoV_mult
 
 
-def run_all_elos(games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
+def run_all_elos(all_data, games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
 	season_regress=0.5, init_elo=1000, elo_type="winloss", avg_score=26.9):
 	"""
 	elo_type: "winloss", "offdef"
