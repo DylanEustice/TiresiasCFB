@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 from src.util import *
 from src.searchAlgorithms import evolutionary_search
+import matplotlib.pyplot as plt
 
 # global paths
 COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
@@ -54,7 +55,10 @@ def run_evolutionary_elo_search(nPop=10, iters=10, kill_rate=0.5, evolve_rng=0.5
 	"""
 	all_data = load_all_dataFrame()
 	games, dates_diff = build_games(all_data)
-	init_params = [4, 4, 1e-3, 9.5, 0.5, 1000]
+	if elo_type == "winloss":
+		init_params = [4, 4, 1e-3, 9.5, 0.5, 1000]
+	elif elo_type == "offdef":
+		init_params = [4, 4, 1e-3, 7.5, 0.5, 1000]
 	args = [all_data, games, dates_diff]
 	kwargs = dict([('min_season',min_season), ('elo_type',elo_type)])
 	return evolutionary_search(nPop, iters, kill_rate, evolve_rng,

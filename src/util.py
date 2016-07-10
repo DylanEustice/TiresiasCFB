@@ -158,4 +158,12 @@ def idv_out_bias(out, tar):
 	"""
 	diff = out - tar
 	return np.mean(diff, axis=0)
-	
+
+
+def linear_regression(X, y):
+	"""
+	Preform linear regression on inputs X with output y
+	"""
+	X = np.matrix(X)
+	y = np.matrix(y)
+	return (X.T * X)**-1 * X.T * y
