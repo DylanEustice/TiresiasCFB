@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import datetime
 from src.util import *
+from src.searchAlgorithms import evolutionary_search
 
 # global paths
 COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
@@ -45,6 +46,19 @@ def build_all_teams():
 		if this_games.shape[0] > 0:
 			teams.append(Team(tid, this_name, this_games))
 	return teams
+
+
+def run_evolutionary_elo_search(nPop=10, iters=10, kill_rate=0.5, evolve_rng=0.5,
+	min_season=1, elo_type="winloss"):
+	"""
+	"""
+	all_data = load_all_dataFrame()
+	games, dates_diff = build_games(all_data)
+	init_params = [4, 4, 1e-3, 9.5, 0.5, 1000]
+	args = [all_data, games, dates_diff]
+	kwargs = dict([('min_season',min_season), ('elo_type',elo_type)])
+	return evolutionary_search(nPop, iters, kill_rate, evolve_rng,
+		elo_obj_fun, init_params, *args, **kwargs)
 
 
 def elo_obj_fun(params, all_data, games, dates_diff, min_season=1, elo_type="winloss"):
@@ -163,7 +177,7 @@ def t_test(pr_result, elo_diff):
 	return (X-mu) / (s/N**0.5)
 
 
-def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
+def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV, max_MoV_mult=1e3):
 	"""
 	Adjust a team's Elo rating based on the outcome of the game
 	A, B, C, K:	Parameters
@@ -171,7 +185,6 @@ def rating_adjuster(Ri, A, B, C, K, elo_diff, MoV):
 	MoV:		Margin of victory (this_score - other_score)
 	elo_diff:	Elo delta (elo_winner - elo_loser)
 	"""
-	assert(B > C * elo_diff)
 	MoV_mult = A / (B + C * elo_diff)
 	MoV_adj = np.sign(MoV) * np.log(np.abs(MoV) + 1)
 	return Ri + K * MoV_adj * MoV_mult
@@ -182,6 +195,7 @@ def run_all_elos(all_data, games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
 	"""
 	elo_type: "winloss", "offdef"
 	"""
+	max_elo_diff = B / C - 1
 	if len(games) == 0 or len(dates_diff) == 0:
 		games, dates_diff = build_games()
 	# Set up elo dictionary
@@ -223,11 +237,16 @@ def run_all_elos(all_data, games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
 		# Calculate parameters based on results
 		if elo_type == "winloss":
 			elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
+			elo_diff = np.sign(elo_diff) * min(abs(elo_diff), max_elo_diff)
 			new_elos = [rating_adjuster(elos[j], A, B, C, K, elo_diff, MoV[j,0]) for j in range(2)]
-			assert(round(sum(elos),3) == round(sum(new_elos),3))
+			try:
+				assert(round(sum(elos),3) == round(sum(new_elos),3))
+			except AssertionError:
+				import pdb; pdb.set_trace()
 		elif elo_type == "offdef":
 			elo_diff = [elos[j][0] - elos[1-j][1] if MoV[j] > 0 else
 						elos[1-j][1] - elos[j][0] for j in range(2)]
+			elo_diff = [np.sign(ed) * min(abs(ed), max_elo_diff) for ed in elo_diff]
 			new_elos = [(0,0),(0,0)]
 			new_elos[0] = (rating_adjuster(elos[0][0], A, B, C, K, elo_diff[0], MoV[0]),
 						   rating_adjuster(elos[0][1], A, B, C, K, elo_diff[1], -MoV[1]))
@@ -240,12 +259,13 @@ def run_all_elos(all_data, games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
 	return elo_dict, teamgid_map, games
 
 
-def build_games():
+def build_games(all_data=None):
 	"""
 	Build list of unique games and the date differences
 	"""
 	# Load data
-	all_data = load_all_dataFrame()
+	if all_data is None:
+		all_data = load_all_dataFrame()
 	# Sort unique game ids by date
 	gids, ix_gids = np.unique(all_data['Id'], return_index=True)
 	ix_date = np.argsort(np.array(all_data['DateUtc'])[ix_gids])
