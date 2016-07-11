@@ -288,3 +288,38 @@ def build_games(all_data=None):
 		assert(game[1,:1] == game[2,1] and game[1,1] == game[2,0])
 		games.append(game)
 	return games, dates_diff
+
+
+def build_elo_mat(teamgid_map, games, dates_diff, elo_winloss, elo_offdef, min_season=1):
+	"""
+	"""
+	# Remove seasons prior to min_season
+	for tid,_ in elo_winloss.iteritems():
+		teamgid_map[tid] = teamgid_map[tid][min_season:]
+		elo_winloss[tid] = elo_winloss[tid][min_season:]
+		elo_offdef[tid] = elo_offdef[tid][min_season:]
+	# Build arrays
+	X = []
+	y = []
+	ixSeason = 0
+	for i, game in enumerate(games):
+		# Check for season gap (100 days)
+		if i > 0 and dates_diff[i-1] > 100:
+			ixSeason += 1
+		# Get team's and their information
+		if ixSeason >= min_season:
+			gid = game[0,0]
+			tids = game[1,:]
+			ixGames = [teamgid_map[tid][ixSeason-min_season].index(gid) for tid in tids]
+			elos_wl = [elo_winloss[tid][ixSeason-min_season][ix] for ix,tid in zip(ixGames,tids)]
+			elos_od = [elo_offdef[tid][ixSeason-min_season][ix] for ix,tid in zip(ixGames,tids)]
+			X.append([elos_wl[0]] + list(elos_od[0]) + [elos_wl[1]] + list(elos_od[1]))
+			X.append([elos_wl[1]] + list(elos_od[1]) + [elos_wl[0]] + list(elos_od[0]))
+			y.append(game[3,0])
+			y.append(game[4,0])
+	X = np.array(X)
+	y = np.array(y)
+	if len(y.shape) < 2:
+		y = y.reshape(y.shape[0], 1)
+	return X, y
+
