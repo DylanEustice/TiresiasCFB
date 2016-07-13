@@ -167,3 +167,20 @@ def linear_regression(X, y):
 	X = np.matrix(X)
 	y = np.matrix(y)
 	return (X.T * X)**-1 * X.T * y
+
+
+def test_corr(all_data, fields):
+	"""
+	IN DEV
+	"""
+	A = np.array(all_data[fields[0]])
+	B = np.array(all_data[fields[1]])
+	# Remove dashed
+	ixKeep = np.logical_and(A != '-', B != '-')
+	A, B = A[ixKeep].astype(float), B[ixKeep].astype(float)
+	# Remove NaN
+	is_num = lambda x: np.logical_not(np.isnan(x))
+	ixKeep = np.logical_and(is_num(A), is_num(B))
+	A, B = A[ixKeep], B[ixKeep]
+	corrcoef = np.corrcoef(A, B)[0,1]
+	return corrcoef
