@@ -4,21 +4,37 @@ import datetime
 from src.util import *
 from src.searchAlgorithms import evolutionary_search
 import matplotlib.pyplot as plt
+import os
 
 # global paths
 COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
 
+# Team name mapping (TEMPORARY HACK)
+team_alt_mapping = {"Army": "Army West Point", 
+					"Southern Mississippi": "Southern Miss", 
+					"Central Florida": "UCF", 
+					"Middle Tennessee State": "Middle Tennessee", 
+					"Brigham Young": "BYU", 
+					"Southern California": "USC", 
+					"Mississippi": "Ole Miss", 
+					"Southern Methodist": "SMU",
+					"Texas Christian": "TCU",
+					"Troy State": "Troy",
+					"Florida International": "FIU",
+					"Texas-San Antonio": "UTSA"}
+
 
 class Team:
-	def __init__(self, tid, name, games):
+	def __init__(self, tid, name, games, year):
 		self.tid = tid
 		self.name = name
 		self.games = games
-		self.scores = np.array([games['this_Score'], games['other_Score']])
-		self.tids = np.array([games['this_TeamId'], games['other_TeamId']])
-		self.gids = np.array(games['Id'])
-		self.dates = np.sort(games['DateUtc'])
-		self.elo = []
+		self.curr_year = year
+		team_dir = os.path.join('data', str(int(year)), 'teams')
+		try:
+			self.info = load_json(self.name + '.json', fdir=team_dir)
+		except:
+			self.info = load_json(team_alt_mapping[self.name] + '.json', fdir=team_dir)
 
 	def __eq__(self, tid):
 		return tid == self.tid
@@ -31,7 +47,7 @@ class Team:
 			return None
 
 
-def build_all_teams():
+def build_all_teams(year=2015):
 	"""
 	Builds a list of teams (entries are Team class) for all compiled data
 	"""
@@ -45,7 +61,10 @@ def build_all_teams():
 		this_name = teamid_dict[str(int(tid))]
 		this_games = all_data[all_data['this_TeamId'] == tid]
 		if this_games.shape[0] > 0:
-			teams.append(Team(tid, this_name, this_games))
+			shift_year = 0
+			while np.all(this_games['Season'] != year-shift_year):
+				shift_year += 1
+			teams.append(Team(tid, this_name, this_games, year-shift_year))
 	return teams
 
 
@@ -322,4 +341,3 @@ def build_elo_mat(teamgid_map, games, dates_diff, elo_winloss, elo_offdef, min_s
 	if len(y.shape) < 2:
 		y = y.reshape(y.shape[0], 1)
 	return X, y
-
