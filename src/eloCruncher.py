@@ -91,7 +91,7 @@ def elo_obj_fun(params, all_data, games, dates_diff, min_season=1, elo_type="win
 	A, B, C, K, season_regress, init_elo = params
 	if K <= 1e-6:
 		return np.inf
-	elo_dict, teamgid_map, games = run_all_elos(all_data, games=games,
+	elo_dict, teamgid_map = run_all_elos(all_data, games=games,
 		dates_diff=dates_diff, elo_type=elo_type, A=A, B=B, C=C, K=K,
 		season_regress=season_regress, init_elo=init_elo)
 	pr_result, elo_diff = assess_elo_confidence(elo_dict, teamgid_map, games, dates_diff,
@@ -279,7 +279,7 @@ def run_all_elos(all_data, games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
 		elo_dict[game[1,1]][ixSeason].append(new_elos[1])
 		teamgid_map[game[1,0]][ixSeason].append(game[0,0])
 		teamgid_map[game[1,1]][ixSeason].append(game[0,1])
-	return elo_dict, teamgid_map, games
+	return elo_dict, teamgid_map
 
 
 def build_games(all_data=None):
@@ -341,3 +341,38 @@ def build_elo_mat(teamgid_map, games, dates_diff, elo_winloss, elo_offdef, min_s
 	if len(y.shape) < 2:
 		y = y.reshape(y.shape[0], 1)
 	return X, y
+
+
+def run_conference_elos(teams, teamgid_map, games, dates_diff, team_elos, conferences):
+	"""
+	"""
+	# build team to conference mapping
+	teamConf_map = {}
+	for team in teams:
+		teamConf_map[team.tid] = str(int(team.info['ConferenceId']))
+	# Init elo dict
+	init_elo = team_elos[team_elos.keys()[0]][0][0]
+	elo_dict = {}
+	for cid in conferences.keys():
+		elo_dict[cid] = []
+		elo_dict[cid].append([init_elo])
+	# Run elos over all games
+	ixSeason = 0
+	for i, game in enumerate(games):
+		# Check for season gap (100 days)
+		if i > 0 and dates_diff[i-1] > 100:
+			ixSeason += 1
+			for id_, elo in elo_dict.iteritems():
+				curr_elo = elo_dict[id_][-1][-1]
+				elo_dict[id_].append([curr_elo])
+		# Find teams game index
+		gid = game[0,0]
+		tids = [tid for tid in game[1,:]]
+		cids = [teamConf_map[tid] for tid in tids]
+		if cids[0] == cids[1]:
+			continue
+		elos = [elo_dict[cid][ixSeason][-1] for cid in cids]
+		ixGames = [teamgid_map[tid][ixSeason].index(gid) for tid in tids]
+		elo_diff = [np.diff(team_elos[tid][ixSeason][ix:ix+2]) for tid,ix in zip(tids, ixGames)]
+		elo_dict[cids[0]][ixSeason].append(elos[0] + elo_diff[0])
+		elo_dict[cids[1]][ixSeason].append(elos[1] + elo_diff[1])
