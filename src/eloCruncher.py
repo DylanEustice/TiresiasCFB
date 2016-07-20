@@ -282,6 +282,62 @@ def run_all_elos(all_data, games=[], dates_diff=[], A=4.0, B=4.0, C=0.001, K=20,
 	return elo_dict, teamgid_map
 
 
+def run_conference_elos(teams, teamgid_map, games, dates_diff, team_elos, conferences,
+	A=4.0, B=4.0, C=0.001, K=20, season_regress=0.5, init_elo=1000):
+	"""
+	"""
+	max_elo_diff = B / C - 1
+	# build team to conference mapping
+	teamConf_map = {}
+	for team in teams:
+		teamConf_map[team.tid] = str(int(team.info['ConferenceId']))
+	# Init elo dict
+	init_elo = team_elos[team_elos.keys()[0]][0][0]
+	elo_dict = {}
+	confgid_map = {}
+	for cid in conferences.keys():
+		elo_dict[cid] = []
+		elo_dict[cid].append([init_elo])
+		confgid_map[cid] = []
+		confgid_map[cid].append([])
+	# Run elos over all games
+	ixSeason = 0
+	for i, game in enumerate(games):
+		# Check for season gap (100 days)
+		if i > 0 and dates_diff[i-1] > 100:
+			ixSeason += 1
+			for id_, elo in elo_dict.iteritems():
+				curr_elo = elo_dict[id_][-1][-1]
+				elo_dict[id_].append([])
+				start_elo = curr_elo + season_regress*(init_elo - curr_elo)
+				elo_dict[id_][ixSeason].append(start_elo)
+				confgid_map[id_].append([])
+		# Find teams game index and conference ids
+		gid = game[0,0]
+		tids = [tid for tid in game[1,:]]
+		cids = [teamConf_map[tid] for tid in tids]
+		if cids[0] == cids[1]:
+			# skip if not OOC
+			continue
+		# Get MoV and conference elos at gametime
+		MoV = -np.diff(game[3:,:])
+		elos = [elo_dict[cid][ixSeason][-1] for cid in cids]
+		elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
+		elo_diff = np.sign(elo_diff) * min(abs(elo_diff), max_elo_diff)
+		new_elos = [rating_adjuster(elos[j], A, B, C, K, elo_diff, MoV[j,0]) for j in range(2)]
+		# Get raw team probabilities
+		ixGames = [teamgid_map[tid][ixSeason].index(gid) for tid in tids]
+		elos_tms = [team_elos[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
+		elo_diff_tms = elos_tms[0] - elos_tms[1] if MoV[0,0] > 0 else elos_tms[1] - elos_tms[0]
+		Pr_outcome = Pr_elo(elo_diff_tms)
+		new_elos = [e + Pr_outcome*(ne-e) for e,ne in zip(elos, new_elos)]
+		elo_dict[cids[0]][ixSeason].append(new_elos[0])
+		elo_dict[cids[1]][ixSeason].append(new_elos[1])
+		confgid_map[cids[0]][ixSeason].append(game[0,0])
+		confgid_map[cids[1]][ixSeason].append(game[0,1])
+	return elo_dict, confgid_map
+
+
 def build_games(all_data=None):
 	"""
 	Build list of unique games and the date differences
@@ -341,38 +397,3 @@ def build_elo_mat(teamgid_map, games, dates_diff, elo_winloss, elo_offdef, min_s
 	if len(y.shape) < 2:
 		y = y.reshape(y.shape[0], 1)
 	return X, y
-
-
-def run_conference_elos(teams, teamgid_map, games, dates_diff, team_elos, conferences):
-	"""
-	"""
-	# build team to conference mapping
-	teamConf_map = {}
-	for team in teams:
-		teamConf_map[team.tid] = str(int(team.info['ConferenceId']))
-	# Init elo dict
-	init_elo = team_elos[team_elos.keys()[0]][0][0]
-	elo_dict = {}
-	for cid in conferences.keys():
-		elo_dict[cid] = []
-		elo_dict[cid].append([init_elo])
-	# Run elos over all games
-	ixSeason = 0
-	for i, game in enumerate(games):
-		# Check for season gap (100 days)
-		if i > 0 and dates_diff[i-1] > 100:
-			ixSeason += 1
-			for id_, elo in elo_dict.iteritems():
-				curr_elo = elo_dict[id_][-1][-1]
-				elo_dict[id_].append([curr_elo])
-		# Find teams game index
-		gid = game[0,0]
-		tids = [tid for tid in game[1,:]]
-		cids = [teamConf_map[tid] for tid in tids]
-		if cids[0] == cids[1]:
-			continue
-		elos = [elo_dict[cid][ixSeason][-1] for cid in cids]
-		ixGames = [teamgid_map[tid][ixSeason].index(gid) for tid in tids]
-		elo_diff = [np.diff(team_elos[tid][ixSeason][ix:ix+2]) for tid,ix in zip(tids, ixGames)]
-		elo_dict[cids[0]][ixSeason].append(elos[0] + elo_diff[0])
-		elo_dict[cids[1]][ixSeason].append(elos[1] + elo_diff[1])
