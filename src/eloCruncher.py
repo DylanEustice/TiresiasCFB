@@ -366,7 +366,7 @@ def run_conference_elos(teams, teamgid_map, team_elos, conferences, games=[],
 		elos_tms = [team_elos[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
 		elo_diff_tms = elos_tms[0] - elos_tms[1] if MoV[0,0] > 0 else elos_tms[1] - elos_tms[0]
 		Pr_outcome = Pr_elo(elo_diff_tms)
-		new_elos = [e + Pr_outcome*(ne-e) for e,ne in zip(elos, new_elos)]
+		new_elos = [e + (1-Pr_outcome)*(ne-e) for e,ne in zip(elos, new_elos)]
 		elo_dict[cids[0]][ixSeason].append(new_elos[0])
 		elo_dict[cids[1]][ixSeason].append(new_elos[1])
 		confgid_map[cids[0]][ixSeason].append(game[0,0])
