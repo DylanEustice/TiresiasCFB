@@ -145,30 +145,22 @@ def train_net_from_prms(prm=None, prm_name=None, data_file=None, fdir=DATA_DIR):
 		# Read data and train
 		with open(os.path.join(fdir, data_file), 'r') as f:
 			part_data = pickle.load(f)
-		net, error = train_net_given_data(prm, part_data)
+		net, error = train_net_from_scratch(prm, part_data=part_data)
 	return net, part_data, error
 
 
-def train_net_from_scratch(prm):
+def train_net_from_scratch(prm, part_data=None):
 	"""
 	Setup data, setup network, and train network given inputs
 	"""
-	# Get data
-	all_data = setup_train_data(prm)
-	# Partition data
-	part_data = partition_data(all_data, train_pct=prm.train_pct)
+	if part_data is None:
+		# Get partitioned data
+		all_data = setup_train_data(prm)
+		part_data = partition_data(all_data, train_pct=prm.train_pct)
+	# Train network
 	net = setup_network(part_data['train'], prm)
 	net, error = train_network(net, part_data, prm)
 	return net, part_data, error
-
-
-def train_net_given_data(prm, part_data):
-	"""
-	Setup network and train network given inputs
-	"""
-	net = setup_network(part_data['train'], prm)
-	net, error = train_network(net, part_data, prm)
-	return net, error
 
 
 def setup_train_data(prm):
