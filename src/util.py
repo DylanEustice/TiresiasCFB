@@ -10,6 +10,7 @@ IO_DIR = os.path.join('data', 'inout_fields')
 COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
 PRM_DIR = os.path.join('data', 'network_params')
 DATA_DIR = os.path.join('data', 'data_sets')
+ELO_DIR = os.path.join('data', 'elo_params')
 
 
 def debug_assert(condition):

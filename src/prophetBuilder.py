@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import os
 import copy
 import pickle
+import datetime
 from src.util import *
 
 # global paths
@@ -103,7 +104,10 @@ class Game:
 		inp_data = inp_data.replace('-', np.nan)
 		inp_data_np = np.asarray(inp_data[inp_fields])
 		inp_data_np	= inp_data_np[~np.isnan(inp_data_np).any(axis=1)]
-		return inp_data_np[0:min(inp_data_np.shape[0], self.n_prev), :]
+		if self.n_prev > 0:
+			return inp_data_np[0:min(inp_data_np.shape[0], self.n_prev), :]
+		else:
+			return inp_data_np
 
 	def all_inp(self):
 		return np.hstack([self.avg_inp(use_this=True), self.avg_inp(use_this=False)])
@@ -113,12 +117,14 @@ class Game:
 		return self.avg_inp_f(data, **self.avg_inp_kwargs)
 
 
-def build_prms_file(prm_name, io_name, io_dir=IO_DIR, n_prev_games=6, min_date=None,
+def build_prms_file(prm_name, io_name, io_dir=IO_DIR, n_prev_games=6,
 	hid_lyr=10, trainf=nl.train.train_gdm, lyr=[nl.trans.SoftMax(),nl.trans.PureLin()],
 	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0,
-	ibias=1.0, inp_avg=np.mean, norm_func=normalize_data):
+	ibias=1.0, inp_avg=np.mean, norm_func=normalize_data, min_date=datetime.datetime(1900,1,1)):
 	"""
 	Build Params object and save to file
+	  Note: n_prev_games = -1 -> autoencoder
+	  		n_prev_games = 0  -> same game
 	"""
 	prms = Params(io_name, io_dir, n_prev_games, min_date, trainf, lyr, train_pct,
 		lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func)
@@ -213,9 +219,12 @@ def build_data(prm):
 				continue
 			# get previous games played by both teams
 			other_all_games = data_by_team[game['other_TeamId']]
-			this_prev_games = tgames[game['DateUtc'] > tgames['DateUtc']]
-			other_prev_games = other_all_games[game['DateUtc']
-							   > other_all_games['DateUtc']]
+			if prm.n_prev_games != 0:
+				this_prev_games = tgames[game['DateUtc'] > tgames['DateUtc']]
+				other_prev_games = other_all_games[game['DateUtc'] > other_all_games['DateUtc']]
+			else:
+				this_prev_games = tgames[game['DateUtc'] == tgames['DateUtc']]
+				other_prev_games = other_all_games[game['DateUtc'] == other_all_games['DateUtc']]
 			if this_prev_games.shape[0] <= 0 or other_prev_games.shape[0] <= 0:
 				continue
 			# build game class instance and append

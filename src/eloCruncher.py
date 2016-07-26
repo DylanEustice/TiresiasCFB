@@ -8,6 +8,7 @@ import os
 
 # global paths
 COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
+ELO_DIR = os.path.join('data', 'elo_params')
 
 # Team name mapping (TEMPORARY HACK)
 team_alt_mapping = {"Army": "Army West Point", 
@@ -93,7 +94,7 @@ def run_evolutionary_elo_search(nPop=10, iters=10, kill_rate=0.5, evolve_rng=0.5
 	elif elo_type == "offdef":
 		init_params = [1., 1e-4, 1e-8, 7.5, 0.5, 1000]
 	elif elo_type == "conf":
-		init_params = [1., 1e-4, 1e-8, 10., 0.5, 1000]
+		init_params = [1., 1e-3, 1e-6, 2., 0.5, 1000]
 	else:
 		raise Exception('elo_type must be  "winloss", "offdef", "conf"')
 	args = [all_data, games, dates_diff]
@@ -250,6 +251,28 @@ def rating_adjuster(Ri, params, elo_diff, MoV, max_MoV_mult=1e3):
 	return Ri + params[3] * MoV_adj * MoV_mult
 
 
+def run_best_elos(year=2015):
+	"""
+	"""
+	# Load parameter files
+	wl_params = np.loadtxt(os.path.join(ELO_DIR, 'Optimal_Winloss_Params.txt'))
+	od_params = np.loadtxt(os.path.join(ELO_DIR, 'Optimal_Offdef_Params.txt'))
+	cf_params = np.loadtxt(os.path.join(ELO_DIR, 'Optimal_Conf_Params.txt'))
+	# Load data
+	all_data = load_all_dataFrame()
+	games, dates_diff = build_games()
+	teams = build_all_teams()
+	conferences = load_json('Conferences.json', fdir='data/'+str(year))
+	# Run elos
+	wl_elos, teamgid_map = run_all_elos(all_data, games=games, dates_diff=dates_diff, 
+		elo_params=wl_params, elo_type="winloss")
+	od_elos,_ = run_all_elos(all_data, games=games, dates_diff=dates_diff, 
+		elo_params=od_params, elo_type="offdef")
+	cf_elos, confgid_map = run_conference_elos(teams, teamgid_map, wl_elos, conferences, 
+		games=games, dates_diff=dates_diff, elo_params=cf_params)
+	return wl_elos, od_elos, cf_elos, teamgid_map, confgid_map
+
+
 def run_all_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 	dates_diff=[], elo_type="winloss", avg_score=26.9):
 	"""
@@ -284,7 +307,7 @@ def run_all_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[]
 		if i > 0 and dates_diff[i-1] > 100:
 			ixSeason += 1
 			for id_, elo in elo_dict.iteritems():
-				curr_elo = elo_dict[id_][-1][-1]
+				curr_elo = elo_dict[id_][-1].pop()
 				elo_dict[id_].append([])
 				if elo_type == "winloss":
 					start_elo = curr_elo + season_regress*(init_elo - curr_elo)
@@ -341,7 +364,6 @@ def run_conference_elos(teams, teamgid_map, team_elos, conferences, games=[],
 	for team in teams:
 		teamConf_map[team.tid] = str(int(team.info['ConferenceId']))
 	# Init elo dict
-	init_elo = team_elos[team_elos.keys()[0]][0][0]
 	elo_dict = {}
 	confgid_map = {}
 	for cid in conferences.keys():
@@ -349,6 +371,11 @@ def run_conference_elos(teams, teamgid_map, team_elos, conferences, games=[],
 		elo_dict[cid].append([init_elo])
 		confgid_map[cid] = []
 		confgid_map[cid].append([])
+	# Get conference sizes
+	conf_sizes = dict((c, 0) for c in conferences)
+	for tid,cid in teamConf_map.iteritems():
+		conf_sizes[cid] += 1
+	avg_conf_size = np.mean([cs for _,cs in conf_sizes.iteritems()])
 	# Run elos over all games
 	ixSeason = 0
 	for i, game in enumerate(games):
@@ -356,7 +383,7 @@ def run_conference_elos(teams, teamgid_map, team_elos, conferences, games=[],
 		if i > 0 and dates_diff[i-1] > 100:
 			ixSeason += 1
 			for id_, elo in elo_dict.iteritems():
-				curr_elo = elo_dict[id_][-1][-1]
+				curr_elo = elo_dict[id_][-1].pop()
 				elo_dict[id_].append([])
 				start_elo = curr_elo + season_regress*(init_elo - curr_elo)
 				elo_dict[id_][ixSeason].append(start_elo)
@@ -365,12 +392,16 @@ def run_conference_elos(teams, teamgid_map, team_elos, conferences, games=[],
 		gid = game[0,0]
 		tids = [tid for tid in game[1,:]]
 		cids = [teamConf_map[tid] for tid in tids]
-		if cids[0] == cids[1]:
-			# skip if not OOC
-			continue
+		confgid_map[cids[0]][ixSeason].append(game[0,0])
+		confgid_map[cids[1]][ixSeason].append(game[0,1])
 		# Get MoV and conference elos at gametime
 		MoV = -np.diff(game[3:,:])
 		elos = [elo_dict[cid][ixSeason][-1] for cid in cids]
+		if cids[0] == cids[1]:
+			# skip if not OOC
+			elo_dict[cids[0]][ixSeason].append(elos[0])
+			elo_dict[cids[1]][ixSeason].append(elos[1])
+			continue
 		elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
 		elo_diff = np.sign(elo_diff) * min(abs(elo_diff), max_elo_diff)
 		new_elos = [rating_adjuster(elos[j], params, elo_diff, MoV[j,0]) for j in range(2)]
@@ -379,11 +410,13 @@ def run_conference_elos(teams, teamgid_map, team_elos, conferences, games=[],
 		elos_tms = [team_elos[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
 		elo_diff_tms = elos_tms[0] - elos_tms[1] if MoV[0,0] > 0 else elos_tms[1] - elos_tms[0]
 		Pr_outcome = Pr_elo(elo_diff_tms)
-		new_elos = [e + (1-Pr_outcome)*(ne-e) for e,ne in zip(elos, new_elos)]
+		# Normalize by number of conference OOC games and probability of outcome based
+		# on team elos
+		new_elos = [e + (avg_conf_size/conf_sizes[cid])*(1-Pr_outcome)*(ne-e)
+			for e,ne,cid in zip(elos, new_elos, cids)]
+		# Store
 		elo_dict[cids[0]][ixSeason].append(new_elos[0])
 		elo_dict[cids[1]][ixSeason].append(new_elos[1])
-		confgid_map[cids[0]][ixSeason].append(game[0,0])
-		confgid_map[cids[1]][ixSeason].append(game[0,1])
 	return elo_dict, confgid_map
 
 
@@ -414,14 +447,16 @@ def build_games(all_data=None):
 	return games, dates_diff
 
 
-def build_elo_mat(teamgid_map, games, dates_diff, elo_winloss, elo_offdef, min_season=1):
+def build_elo_mat(teams, wl_elos, od_elos, cf_elos, teamgid_map, confgid_map,
+	games=[], dates_diff=[], min_season=1):
 	"""
 	"""
-	# Remove seasons prior to min_season
-	for tid,_ in elo_winloss.iteritems():
-		teamgid_map[tid] = teamgid_map[tid][min_season:]
-		elo_winloss[tid] = elo_winloss[tid][min_season:]
-		elo_offdef[tid] = elo_offdef[tid][min_season:]
+	if len(games) == 0 or len(dates_diff) == 0:
+		games, dates_diff = build_games()
+	# Build team to conference mapping
+	teamConf_map = {}
+	for team in teams:
+		teamConf_map[team.tid] = str(int(team.info['ConferenceId']))
 	# Build arrays
 	X = []
 	y = []
@@ -431,16 +466,25 @@ def build_elo_mat(teamgid_map, games, dates_diff, elo_winloss, elo_offdef, min_s
 		if i > 0 and dates_diff[i-1] > 100:
 			ixSeason += 1
 		# Get team's and their information
-		if ixSeason >= min_season:
-			gid = game[0,0]
-			tids = game[1,:]
-			ixGames = [teamgid_map[tid][ixSeason-min_season].index(gid) for tid in tids]
-			elos_wl = [elo_winloss[tid][ixSeason-min_season][ix] for ix,tid in zip(ixGames,tids)]
-			elos_od = [elo_offdef[tid][ixSeason-min_season][ix] for ix,tid in zip(ixGames,tids)]
-			X.append([elos_wl[0]] + list(elos_od[0]) + [elos_wl[1]] + list(elos_od[1]))
-			X.append([elos_wl[1]] + list(elos_od[1]) + [elos_wl[0]] + list(elos_od[0]))
-			y.append(game[3,0])
-			y.append(game[4,0])
+		if ixSeason < min_season:
+			continue
+		gid = game[0,0]
+		# Get team stats
+		tids = game[1,:]
+		ixGames = [teamgid_map[tid][ixSeason].index(gid) for tid in tids]
+		game_elos_wl = [wl_elos[tid][ixSeason][ix] for ix,tid in zip(ixGames,tids)]
+		game_elos_od = [od_elos[tid][ixSeason][ix] for ix,tid in zip(ixGames,tids)]
+		# Get conference stats
+		cids = [teamConf_map[tid] for tid in tids]
+		ixGames = [confgid_map[cid][ixSeason].index(gid) for cid in cids]
+		game_elos_cf = [cf_elos[cid][ixSeason][ix] for ix,cid in zip(ixGames,cids)]
+		# Add to matrix
+		for ix in range(2):
+			wl_arr = [game_elos_wl[ix], game_elos_wl[1-ix]]
+			cf_arr = [game_elos_cf[ix], game_elos_cf[1-ix]]
+			od_arr = list(game_elos_od[ix]) + list(game_elos_od[1-ix])
+			X.append(wl_arr + cf_arr + od_arr)
+			y.append(game[3+ix,0])
 	X = np.array(X)
 	y = np.array(y)
 	if len(y.shape) < 2:
