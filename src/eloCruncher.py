@@ -113,7 +113,7 @@ def elo_obj_fun(params, all_data, games, dates_diff, min_season=1, elo_type="win
 	if params[3] <= 1e-6:
 		return np.inf
 	if elo_type == "winloss" or elo_type == "offdef":
-		elo_dict, teamgid_map = run_all_elos(all_data, games=games,
+		elo_dict, teamgid_map = run_elos(all_data, games=games,
 			dates_diff=dates_diff, elo_type=elo_type, elo_params=params)
 		pr_result, elo_diff = assess_elo_confidence(elo_dict, teamgid_map, games,
 			dates_diff,	min_season=min_season, do_print=False, elo_type=elo_type)
@@ -264,16 +264,16 @@ def run_best_elos(year=2015):
 	teams = build_all_teams()
 	conferences = load_json('Conferences.json', fdir='data/'+str(year))
 	# Run elos
-	wl_elos, teamgid_map = run_all_elos(all_data, games=games, dates_diff=dates_diff, 
+	wl_elos, teamgid_map = run_elos(all_data, games=games, dates_diff=dates_diff, 
 		elo_params=wl_params, elo_type="winloss")
-	od_elos,_ = run_all_elos(all_data, games=games, dates_diff=dates_diff, 
+	od_elos,_ = run_elos(all_data, games=games, dates_diff=dates_diff, 
 		elo_params=od_params, elo_type="offdef")
 	cf_elos, confgid_map = run_conference_elos(teams, teamgid_map, wl_elos, conferences, 
 		games=games, dates_diff=dates_diff, elo_params=cf_params)
 	return wl_elos, od_elos, cf_elos, teamgid_map, confgid_map
 
 
-def run_all_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
+def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 	dates_diff=[], elo_type="winloss", avg_score=26.9):
 	"""
 	elo_type: "winloss", "offdef"
