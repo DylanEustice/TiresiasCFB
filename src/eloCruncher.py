@@ -37,8 +37,8 @@ class Team:
 		except:
 			self.info = load_json(team_alt_mapping[self.name] + '.json', fdir=team_dir)
 
-	def __eq__(self, tid):
-		return tid == self.tid
+	def __eq__(self, id_):
+		return id_ == self.tid or id_ == self.name
 
 	def get_game(self, gid):
 		if gid in self.gids:
@@ -58,6 +58,7 @@ class Team:
 		c1 = self.info['PrimaryColor']
 		c2 = self.info['SecondaryColor']
 		ax.plot(team_elos, '-o', markerfacecolor=c1, markeredgecolor=c2, color=c2)
+		ax.grid('on')
 		return ax
 
 
@@ -251,10 +252,57 @@ def rating_adjuster(Ri, params, elo_diff, MoV, max_MoV_mult=1e3):
 	return Ri + params[3] * MoV_adj * MoV_mult
 
 
+def team_to_conf_map(teams):
+	# Build team to conference mapping
+	teamConf_map = {}
+	for team in teams:
+		teamConf_map[team.tid] = str(int(team.info['ConferenceId']))
+	return teamConf_map
+
+
+def append_elos_to_dataFrame(year=2015):
+	"""
+	"""
+	elos, _, _, _, _ = gen_elo_files(year=year)
+
+
 def gen_elo_files(year=2015):
 	"""
 	"""
-	wl_elos, od_elos, cf_elos, teamgid_map, confgid_map = run_best_elos(year)
+	teams = build_all_teams()
+	wl_elos, od_elos, cf_elos, teamgid_map, confgid_map = run_best_elos(year=year)
+	# Seperate offensive and defensive elos
+	off_elos, def_elos = {}, {}
+	for tid in od_elos:
+		off_elos[tid] = []
+		def_elos[tid] = []
+		for ixSeason in range(len(od_elos[tid])):
+			off_elos[tid].append([elo[0] for elo in od_elos[tid][ixSeason]])
+			def_elos[tid].append([elo[1] for elo in od_elos[tid][ixSeason]])
+	# Put into dictionary with game/team ID keys
+	teamConf_map = team_to_conf_map(teams)
+	elos = {}
+	for tid in wl_elos:
+		cid = teamConf_map[tid]
+		for ixSeason in range(len(od_elos[tid])):
+			for ix in range(len(od_elos[tid][ixSeason])):
+				try:
+					gid = teamgid_map[tid][ixSeason][ix]
+				except IndexError:
+					gid = -ixSeason
+				if gid not in elos:
+					elos[gid] = {}
+				try:
+					ixConf_elos = confgid_map[cid][ixSeason].index(gid)
+				except ValueError:
+					ixConf_elos = -1
+				elos[gid][tid] = [wl_elos[tid][ixSeason][ix], 
+								  off_elos[tid][ixSeason][ix], 
+								  def_elos[tid][ixSeason][ix],
+								  cf_elos[cid][ixSeason][ixConf_elos]]
+	# Save files to JSON
+	dump_json(elos, "elos.json", fdir=ELO_DIR)
+	return elos, wl_elos, off_elos, def_elos, cf_elos
 
 
 def run_best_elos(year=2015):
@@ -313,7 +361,7 @@ def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 		if i > 0 and dates_diff[i-1] > 100:
 			ixSeason += 1
 			for id_, elo in elo_dict.iteritems():
-				curr_elo = elo_dict[id_][-1].pop()
+				curr_elo = elo_dict[id_][-1][-1]
 				elo_dict[id_].append([])
 				if elo_type == "winloss":
 					start_elo = curr_elo + season_regress*(init_elo - curr_elo)
@@ -389,7 +437,7 @@ def run_conference_elos(teams, teamgid_map, team_elos, conferences, games=[],
 		if i > 0 and dates_diff[i-1] > 100:
 			ixSeason += 1
 			for id_, elo in elo_dict.iteritems():
-				curr_elo = elo_dict[id_][-1].pop()
+				curr_elo = elo_dict[id_][-1][-1]
 				elo_dict[id_].append([])
 				start_elo = curr_elo + season_regress*(init_elo - curr_elo)
 				elo_dict[id_][ixSeason].append(start_elo)
