@@ -8,7 +8,7 @@ import os
 
 # global paths
 COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
-ELO_DIR = os.path.join('data', 'elo_params')
+ELO_DIR = os.path.join('data', 'elo')
 
 # Team name mapping (TEMPORARY HACK)
 team_alt_mapping = {"Army": "Army West Point", 
@@ -249,6 +249,12 @@ def rating_adjuster(Ri, params, elo_diff, MoV, max_MoV_mult=1e3):
 	MoV_mult = 1. / np.dot(params[:3], [1, elo_diff, np.sign(elo_diff)*elo_diff**2])
 	MoV_adj = np.sign(MoV) * np.log(np.abs(MoV) + 1)
 	return Ri + params[3] * MoV_adj * MoV_mult
+
+
+def gen_elo_files(year=2015):
+	"""
+	"""
+	wl_elos, od_elos, cf_elos, teamgid_map, confgid_map = run_best_elos(year)
 
 
 def run_best_elos(year=2015):
