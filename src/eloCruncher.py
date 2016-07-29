@@ -263,7 +263,17 @@ def team_to_conf_map(teams):
 def append_elos_to_dataFrame(year=2015):
 	"""
 	"""
-	elos, _, _, _, _ = gen_elo_files(year=year)
+	elos, wl_elos, off_elos, def_elos, cf_elos = gen_elo_files(year=year)
+	all_data = load_all_dataFrame()
+	gids = [gid for gid in all_data['Id']]
+	tids = [tid for tid in all_data['this_TeamId']]
+	types = ['wl_elo', 'off_elo', 'def_elo', 'cf_elo']
+	for i, t in enumerate(types):
+		type_elos = [elos[gid][tid][i] for gid, tid in zip(all_data['Id'], all_data['this_TeamId'])]
+		all_data[t] = pd.Series(type_elos, index=all_data.index)
+	# Save
+	all_data.to_pickle(os.path.join('data', 'compiled_team_data', 'all.df'))
+	return all_data
 
 
 def gen_elo_files(year=2015):
