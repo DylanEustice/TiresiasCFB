@@ -183,11 +183,12 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, min_season=1,
 	return pr_result, elo_diff
 
 
-def plt_pr_result_hist(pr_result, nBins=6, ax=None, **kwargs):
+def plt_pr_result_hist(pr_result, nBins=6, nFig=None, **kwargs):
 	"""
 	"""
 	bins = np.linspace(0.5,1.0,nBins)
 	to_hist = []
+	n_occr = []
 	for i in range(nBins-1):
 		ix = [j for j,pr in enumerate(pr_result) if bins[i] <= pr[0] < bins[i+1]]
 		nCorrect = len([j for j in ix if pr_result[j][1]])
@@ -196,14 +197,16 @@ def plt_pr_result_hist(pr_result, nBins=6, ax=None, **kwargs):
 		else:
 			pct_correct = -1
 		to_hist.append(pct_correct)
-	if ax is None:
-		fig = plt.figure()
-		ax = fig.add_subplot(111)
+		n_occr.append(len(ix))
+	fig = plt.figure(nFig)
+	ax1 = fig.add_subplot(211)
+	ax2 = fig.add_subplot(212)
 	bin_width = bins[1] - bins[0]
 	bins = bins[:-1] + bin_width / 2
-	ax.bar(bins, to_hist, width=bin_width, **kwargs)
-	ax.grid()
-	return ax
+	ax1.bar(bins, to_hist, width=bin_width, **kwargs)
+	ax1.grid('on')
+	ax2.bar(bins, n_occr, width=bin_width, **kwargs)
+	ax2.grid('on')
 
 
 def elo_game_probs(elos, div=400):
