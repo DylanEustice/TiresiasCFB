@@ -153,7 +153,8 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, min_season=1,
 				elos = [elo_dict[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
 			elif elo_type=="conf":
 				cids = [teamConf_map[tid] for tid in tids]
-				elos = [elo_dict[cid][ixSeason][-1] for cid in cids]
+				ixGames = [gid_map[cid][ixSeason].index(gid) for cid in cids]
+				elos = [elo_dict[cid][ixSeason][ix] for cid,ix in zip(cids,ixGames)]
 			else:
 				raise Exception('elo_type must be  "winloss", "offdef", "conf"')
 			# Determine win probabilities and winner
