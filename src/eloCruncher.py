@@ -83,9 +83,9 @@ def build_all_teams(year=2015):
 	return teams
 
 
-def run_evolutionary_elo_search(nPop=10, iters=10, kill_rate=0.5, evolve_rng=0.5,
-	min_season=1, elo_type="winloss", teams=None, teamgid_map=None, team_elos=None,
-	conferences=None):
+def run_evolutionary_elo_search(obj_fun=elo_obj_fun, nPop=10, iters=10, kill_rate=0.5, evolve_rng=0.5,
+	season_range=range(1,16), elo_type="winloss", teams=None, teamgid_map=None,
+	team_elos=None,	conferences=None):
 	"""
 	"""
 	all_data = load_all_dataFrame()
@@ -99,15 +99,49 @@ def run_evolutionary_elo_search(nPop=10, iters=10, kill_rate=0.5, evolve_rng=0.5
 	else:
 		raise Exception('elo_type must be  "winloss", "offdef", "conf"')
 	args = [all_data, games, dates_diff]
-	kwargs = dict([('min_season',min_season), ('elo_type',elo_type),
+	kwargs = dict([('season_range',season_range), ('elo_type',elo_type),
 				   ('teams',teams), ('teamgid_map',teamgid_map),
 				   ('team_elos',team_elos), ('conferences',conferences)])
 	return evolutionary_search(nPop, iters, kill_rate, evolve_rng,
-		elo_obj_fun, init_params, *args, **kwargs)
+		elo_obj_fun_ranges, init_params, *args, **kwargs)
 
 
-def elo_obj_fun(params, all_data, games, dates_diff, min_season=1, elo_type="winloss",
-	teams=None, teamgid_map=None, team_elos=None, conferences=None):
+def elo_obj_fun_ranges(params, all_data, games, dates_diff, elo_type="winloss",
+	teams=None, teamgid_map=None, team_elos=None, conferences=None, season_range=range(1,16)):
+	"""
+	"""
+	if elo_type == "winloss" or elo_type == "offdef":
+		elo_dict, gid_map = run_elos(all_data, games=games,
+			dates_diff=dates_diff, elo_type=elo_type, elo_params=params)
+	else:
+		elo_dict, gid_map = run_conference_elos(teams, teamgid_map, team_elos,
+			conferences, games=games, dates_diff=dates_diff, elo_params=params)
+	# By season
+	obj_vals_seas = []
+	for seas in season_range:
+		pr_result, elo_diff = assess_elo_confidence(elo_dict, gid_map, games, dates_diff,
+			season_range=[seas], do_print=False, elo_type=elo_type, teams=teams)
+		obj_vals_seas.append(abs(t_test(pr_result, elo_diff)))
+	seas_val = np.sqrt(np.mean(np.array(obj_vals_seas)**2))
+	# By quartile
+	obj_vals_qtr = []
+	for qtr in range(4):
+		pr_result, elo_diff = assess_elo_confidence(elo_dict, gid_map, games, dates_diff,
+			season_quartile=[qtr], do_print=False, elo_type=elo_type, teams=teams, 
+			season_range=season_range)
+		obj_vals_qtr.append(abs(t_test(pr_result, elo_diff)))
+	qtr_val = np.sqrt(np.mean(np.array(obj_vals_qtr)**2))
+	# Full
+	pr_result, elo_diff = assess_elo_confidence(elo_dict, gid_map, games, dates_diff,
+		do_print=False, elo_type=elo_type, teams=teams,  season_range=season_range)
+	tot_val = abs(t_test(pr_result, elo_diff))
+	return seas_val + qtr_val + tot_val
+
+
+
+def elo_obj_fun(params, all_data, games, dates_diff, season_range=range(1,16),
+	elo_type="winloss",	teams=None, teamgid_map=None, team_elos=None,
+	conferences=None, season_quartile=range(4)):
 	"""
 	params: A, B, C, K, season_regress, init_elo
 	"""
@@ -117,18 +151,19 @@ def elo_obj_fun(params, all_data, games, dates_diff, min_season=1, elo_type="win
 		elo_dict, teamgid_map = run_elos(all_data, games=games,
 			dates_diff=dates_diff, elo_type=elo_type, elo_params=params)
 		pr_result, elo_diff = assess_elo_confidence(elo_dict, teamgid_map, games,
-			dates_diff,	min_season=min_season, do_print=False, elo_type=elo_type)
+			dates_diff,	season_range=season_range, do_print=False, elo_type=elo_type,
+			season_quartile=season_quartile)
 	elif elo_type == "conf":
 		elo_dict, confgid_map = run_conference_elos(teams, teamgid_map, team_elos,
 			conferences, games=games, dates_diff=dates_diff, elo_params=params)
 		pr_result, elo_diff = assess_elo_confidence(elo_dict, confgid_map, games,
-			dates_diff,	min_season=min_season, do_print=False, elo_type=elo_type,
-			teams=teams)
+			dates_diff,	season_range=season_range, do_print=False, elo_type=elo_type,
+			teams=teams, season_quartile=season_quartile)
 	return abs(t_test(pr_result, elo_diff))
 
 
-def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, min_season=1,
-	do_print=True, elo_type="winloss", avg_score=26.9, teams=None):
+def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=range(1,16), 
+	do_print=True, elo_type="winloss", avg_score=26.9, teams=None, season_quartile=range(4)):
 	"""
 	"""
 	pr_result = [] # (Pr_win, correct)
@@ -136,6 +171,8 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, min_season=1,
 	ixSeason = 0
 	# Build team to conference mapping
 	if elo_type=="conf":
+		if teams is None:
+			teams = build_all_teams()
 		teamConf_map = {}
 		for team in teams:
 			teamConf_map[team.tid] = str(int(team.info['ConferenceId']))
@@ -144,19 +181,27 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, min_season=1,
 		if i > 0 and dates_diff[i-1] > 100:
 			ixSeason += 1
 		# Don't do this for first min_season seasons
-		if ixSeason >= min_season:
+		if ixSeason in season_range:
 			# Get team's and their information
 			gid = game[0,0]
 			tids = [tid for tid in game[1,:]]
 			if elo_type == "winloss" or elo_type == "offdef":
 				ixGames = [gid_map[tid][ixSeason].index(gid) for tid in tids]
+				game_quartials = [min(int(ix/3), 3) for ix in ixGames]
 				elos = [elo_dict[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
 			elif elo_type=="conf":
 				cids = [teamConf_map[tid] for tid in tids]
+				if cids[0] == cids[1]:
+					continue
 				ixGames = [gid_map[cid][ixSeason].index(gid) for cid in cids]
+				game_quartials = [min(int(4*ix/len(gid_map[cid][ixSeason])), 3) for 
+					ix,cid in zip(ixGames, cids)]
 				elos = [elo_dict[cid][ixSeason][ix] for cid,ix in zip(cids,ixGames)]
 			else:
 				raise Exception('elo_type must be  "winloss", "offdef", "conf"')
+			# Make sure this is in the correct season quartile
+			if not any([q in season_quartile for q in game_quartials]):
+				continue
 			# Determine win probabilities and winner
 			if elo_type == "winloss" or elo_type=="conf":
 				Pr_win = max(elo_game_probs(elos))
