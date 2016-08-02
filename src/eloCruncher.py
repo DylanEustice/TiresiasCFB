@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import datetime
 from src.util import *
+from src.team import *
 from src.searchAlgorithms import evolutionary_search
 import matplotlib.pyplot as plt
 import os
@@ -9,101 +10,6 @@ import os
 # global paths
 COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
 ELO_DIR = os.path.join('data', 'elo')
-
-# Team name mapping (TEMPORARY HACK)
-team_alt_mapping = {"Army": "Army West Point", 
-					"Southern Mississippi": "Southern Miss", 
-					"Central Florida": "UCF", 
-					"Middle Tennessee State": "Middle Tennessee", 
-					"Brigham Young": "BYU", 
-					"Southern California": "USC", 
-					"Mississippi": "Ole Miss", 
-					"Southern Methodist": "SMU",
-					"Texas Christian": "TCU",
-					"Troy State": "Troy",
-					"Florida International": "FIU",
-					"Texas-San Antonio": "UTSA"}
-
-
-class Team:
-	def __init__(self, tid, name, games, year):
-		self.tid = tid
-		self.name = name
-		self.games = games
-		self.curr_year = year
-		team_dir = os.path.join('data', str(int(year)), 'teams')
-		try:
-			self.info = load_json(self.name + '.json', fdir=team_dir)
-		except:
-			self.info = load_json(team_alt_mapping[self.name] + '.json', fdir=team_dir)
-
-	def __eq__(self, id_):
-		return id_ == self.tid or id_ == self.name
-
-	def get_game(self, gid):
-		if gid in self.gids:
-			return self.scores[:,self.gids==gid]
-		else:
-			print "Game ID {} not found for {}".format(gid, self.name)
-			return None
-
-	def plot_elo(self, elo_dict, ax=None, ix=None, **kwargs):
-		if ax is None:
-			fig = plt.figure()
-			ax = fig.add_subplot(111)
-		if ix is None:
-			team_elos = [e for seas in elo_dict[self.tid] for e in seas]
-		else:
-			team_elos = [e[ix] for seas in elo_dict[self.tid] for e in seas]
-		c1 = self.info['PrimaryColor']
-		c2 = self.info['SecondaryColor']
-		ax.plot(team_elos, '-o', markerfacecolor=c1, markeredgecolor=c2, color=c2, **kwargs)
-		ax.grid('on')
-		return ax
-
-
-def build_all_teams(year=2015):
-	"""
-	Builds a list of teams (entries are Team class) for all compiled data
-	"""
-	# Load data
-	all_data = load_all_dataFrame()
-	# Load team info
-	teamid_dict = load_json('team_names.json', fdir='data')
-	teamids = sorted(set([tid for tid in all_data['this_TeamId']]))
-	teams = []
-	for tid in teamids:
-		this_name = teamid_dict[str(int(tid))]
-		this_games = all_data[all_data['this_TeamId'] == tid]
-		if this_games.shape[0] > 0:
-			shift_year = 0
-			while np.all(this_games['Season'] != year-shift_year):
-				shift_year += 1
-			teams.append(Team(tid, this_name, this_games, year-shift_year))
-	return teams
-
-
-def run_evolutionary_elo_search(obj_fun=elo_obj_fun, nPop=10, iters=10, kill_rate=0.5, evolve_rng=0.5,
-	season_range=range(1,16), elo_type="winloss", teams=None, teamgid_map=None,
-	team_elos=None,	conferences=None):
-	"""
-	"""
-	all_data = load_all_dataFrame()
-	games, dates_diff = build_games(all_data)
-	if elo_type == "winloss":
-		init_params = [1., 1e-4, 1e-8, 9.5, 0.5, 1000]
-	elif elo_type == "offdef":
-		init_params = [1., 1e-4, 1e-8, 7.5, 0.5, 1000]
-	elif elo_type == "conf":
-		init_params = [1., 1e-3, 1e-6, 2., 0.5, 1000]
-	else:
-		raise Exception('elo_type must be  "winloss", "offdef", "conf"')
-	args = [all_data, games, dates_diff]
-	kwargs = dict([('season_range',season_range), ('elo_type',elo_type),
-				   ('teams',teams), ('teamgid_map',teamgid_map),
-				   ('team_elos',team_elos), ('conferences',conferences)])
-	return evolutionary_search(nPop, iters, kill_rate, evolve_rng,
-		elo_obj_fun_ranges, init_params, *args, **kwargs)
 
 
 def elo_obj_fun_ranges(params, all_data, games, dates_diff, elo_type="winloss",
@@ -138,7 +44,6 @@ def elo_obj_fun_ranges(params, all_data, games, dates_diff, elo_type="winloss",
 	return seas_val + qtr_val + tot_val
 
 
-
 def elo_obj_fun(params, all_data, games, dates_diff, season_range=range(1,16),
 	elo_type="winloss",	teams=None, teamgid_map=None, team_elos=None,
 	conferences=None, season_quartile=range(4)):
@@ -160,6 +65,29 @@ def elo_obj_fun(params, all_data, games, dates_diff, season_range=range(1,16),
 			dates_diff,	season_range=season_range, do_print=False, elo_type=elo_type,
 			teams=teams, season_quartile=season_quartile)
 	return abs(t_test(pr_result, elo_diff))
+
+
+def run_evolutionary_elo_search(obj_fun=elo_obj_fun, nPop=10, iters=10, kill_rate=0.5, evolve_rng=0.5,
+	season_range=range(1,16), elo_type="winloss", teams=None, teamgid_map=None,
+	team_elos=None,	conferences=None):
+	"""
+	"""
+	all_data = load_all_dataFrame()
+	games, dates_diff = build_games(all_data)
+	if elo_type == "winloss":
+		init_params = [1., 1e-4, 1e-8, 9.5, 0.5, 1000]
+	elif elo_type == "offdef":
+		init_params = [1., 1e-4, 1e-8, 7.5, 0.5, 1000]
+	elif elo_type == "conf":
+		init_params = [1., 1e-3, 1e-6, 2., 0.5, 1000]
+	else:
+		raise Exception('elo_type must be  "winloss", "offdef", "conf"')
+	args = [all_data, games, dates_diff]
+	kwargs = dict([('season_range',season_range), ('elo_type',elo_type),
+				   ('teams',teams), ('teamgid_map',teamgid_map),
+				   ('team_elos',team_elos), ('conferences',conferences)])
+	return evolutionary_search(nPop, iters, kill_rate, evolve_rng,
+		elo_obj_fun_ranges, init_params, *args, **kwargs)
 
 
 def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=range(1,16), 
@@ -387,7 +315,7 @@ def run_best_elos(year=2015):
 
 
 def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
-	dates_diff=[], elo_type="winloss", avg_score=26.9):
+	dates_diff=[], elo_type="winloss", avg_score=26.9, start_season=0):
 	"""
 	elo_type: "winloss", "offdef"
 	"""
@@ -428,6 +356,8 @@ def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 					start_elo = tuple(e + season_regress*(init_elo - e) for e in curr_elo)
 				elo_dict[id_][ixSeason].append(start_elo)
 				teamgid_map[id_].append([])
+		if ixSeason < start_season:
+			continue
 		# Recalculate Elos with results of game
 		if elo_type == "winloss":
 			MoV = -np.diff(game[3:,:])

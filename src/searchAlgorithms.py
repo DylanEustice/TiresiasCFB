@@ -15,7 +15,7 @@ def evolutionary_search(nPop, iters, kill_rate, evolve_rng, obj_fun, params, *ar
 	best_fit = []
 	# Start iterating
 	for i in range(iters):
-		if i % 10 == 0:
+		if i % 1 == 0:
 			print "iter {} of {}".format(i, iters)
 		fitness = oracle(obj_fun, pop, *args, **kwargs)
 		ixFit = np.argsort(fitness)
