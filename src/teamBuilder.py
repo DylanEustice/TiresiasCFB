@@ -172,8 +172,20 @@ def build_team_DataFrames():
 		fname = tid +'_DataFrame.df'
 		box_arr.to_pickle(os.path.join(comp_team_dir, fname))
 		data_frames.append(box_arr)
-	all_df = pd.concat(data_frames)
+	all_df = concatenate_team_DataFrames(data_frames=data_frames)
 	all_df.to_pickle(os.path.join(comp_team_dir, 'all.df'))
+
+
+def concatenate_team_DataFrames(data_frames=[]):
+	"""
+	"""
+	if len(data_frames) == 0:
+		comp_team_dir = os.path.join('data', 'compiled_team_data')
+		for tid, team in teams.iteritems():
+			fname = str(tid) + '_DataFrame.df'
+			data_frames.append(pd.read_pickle(os.path.join(comp_team_dir, fname)))
+	all_df = pd.concat(data_frames)
+	return all_df
 
 
 def team_boxscore_to_array(team, team_id):
