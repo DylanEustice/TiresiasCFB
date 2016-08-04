@@ -246,15 +246,19 @@ def append_elos_to_dataFrame(year=2015):
 	tids = [tid for tid in all_data['this_TeamId']]
 	types = ['wl_elo', 'off_elo', 'def_elo', 'cf_elo']
 	for i, t in enumerate(types):
-		type_elos = [elos[gid][tid][i] for gid, tid in zip(all_data['Id'], all_data['this_TeamId'])]
-		all_data[t] = pd.Series(type_elos, index=all_data.index)
+		this_elos = [elos[gid][tid][i] for gid, tid in zip(all_data['Id'], all_data['this_TeamId'])]
+		other_elos = [elos[gid][tid][i] for gid, tid in zip(all_data['Id'], all_data['other_TeamId'])]
+		all_data['this_' + t] = pd.Series(this_elos, index=all_data.index)
+		all_data['other_' + t] = pd.Series(other_elos, index=all_data.index)
 	# Save
 	all_data.to_pickle(os.path.join('data', 'compiled_team_data', 'all.df'))
 	return all_data
 
 
-def gen_elo_files(year=2015):
+def gen_elo_files(year=2015, shift=True):
 	"""
+	year: specifies the year to assign teams' conferences
+	shift: shifts the elo of a game to be after the outcome
 	"""
 	teams = build_all_teams()
 	wl_elos, od_elos, cf_elos, teamgid_map, confgid_map = run_best_elos(year=year)
@@ -269,23 +273,18 @@ def gen_elo_files(year=2015):
 	# Put into dictionary with game/team ID keys
 	teamConf_map = team_to_conf_map(teams)
 	elos = {}
+	s = 1 if shift else 0
 	for tid in wl_elos:
 		cid = teamConf_map[tid]
 		for ixSeason in range(len(od_elos[tid])):
-			for ix in range(len(od_elos[tid][ixSeason])):
-				try:
-					gid = teamgid_map[tid][ixSeason][ix]
-				except IndexError:
-					gid = -ixSeason
+			for ix in range(len(od_elos[tid][ixSeason])-1):
+				gid = teamgid_map[tid][ixSeason][ix]
 				if gid not in elos:
 					elos[gid] = {}
-				try:
-					ixConf_elos = confgid_map[cid][ixSeason].index(gid)
-				except ValueError:
-					ixConf_elos = -1
-				elos[gid][tid] = [wl_elos[tid][ixSeason][ix], 
-								  off_elos[tid][ixSeason][ix], 
-								  def_elos[tid][ixSeason][ix],
+				ixConf_elos = confgid_map[cid][ixSeason].index(gid)
+				elos[gid][tid] = [wl_elos[tid][ixSeason][ix+s], 
+								  off_elos[tid][ixSeason][ix+s], 
+								  def_elos[tid][ixSeason][ix+s],
 								  cf_elos[cid][ixSeason][ixConf_elos]]
 	# Save files to JSON
 	dump_json(elos, "elos.json", fdir=ELO_DIR)
