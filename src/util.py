@@ -170,6 +170,20 @@ def linear_regression(X, y):
 	return (X.T * X)**-1 * X.T * y
 
 
+def elo_mean(x, fields, elo_fields=['this_wl_elo','other_wl_elo','this_off_elo',
+	'other_off_elo','this_def_elo','other_def_elo','this_cf_elo','other_cf_elo']):
+	"""
+	Preforms a mean on a data series, but using the last indexed
+	elo value instead of averaging
+	"""
+	if x.shape[0] <= 1:
+		return x
+	u = np.zeros([1,x.shape[1]])
+	for i in range(x.shape[1]):
+		u[0,i] = np.mean(x[:,i]) if fields[i] not in elo_fields else x[-1,i]
+	return u
+
+
 def test_corr(all_data, fields):
 	"""
 	IN DEV

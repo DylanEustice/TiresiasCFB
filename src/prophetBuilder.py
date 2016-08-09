@@ -74,6 +74,8 @@ class Game:
 		self.out_fields = out_fields
 		self.this_inp_data = self.filter_inp(this_inp_data, this_inp_fields)
 		self.other_inp_data = self.filter_inp(other_inp_data, other_inp_fields)
+		if self.this_inp_data.shape[0] == 0 or self.other_inp_data.shape[0] == 0:
+			return
 		self.avg_inp_f = avg_inp_callback
 		self.avg_inp_kwargs = kwargs
 		# Get target data if exists
@@ -92,7 +94,6 @@ class Game:
 			self.inp_data = self.all_inp()
 		else:
 			self.inp_data = self.tar_data
-			
 
 	def filter_inp(self, inp_data, inp_fields):
 		"""
@@ -110,7 +111,10 @@ class Game:
 			return inp_data_np
 
 	def all_inp(self):
-		return np.hstack([self.avg_inp(use_this=True), self.avg_inp(use_this=False)])
+		try:
+			return np.hstack([self.avg_inp(use_this=True), self.avg_inp(use_this=False)])
+		except:
+			import pdb; pdb.set_trace()
 
 	def avg_inp(self, use_this=True):
 		data = self.this_inp_data if use_this else self.other_inp_data
@@ -151,7 +155,7 @@ def train_net_from_prms(prm=None, prm_name=None, data_file=None, fdir=DATA_DIR):
 		# Read data and train
 		with open(os.path.join(fdir, data_file), 'r') as f:
 			part_data = pickle.load(f)
-		net, error = train_net_from_scratch(prm, part_data=part_data)
+		net, _, error = train_net_from_scratch(prm, part_data=part_data)
 	return net, part_data, error
 
 
@@ -200,6 +204,11 @@ def build_data(prm):
 	io_fields = load_json(prm.io_name, fdir=prm.io_dir)
 	inp_fields = io_fields['inputs']
 	out_fields = io_fields['outputs']
+	# Decide keyword argument to use
+	if prm.inp_avg is np.mean:
+		kwargs = dict([('axis',0)])
+	elif prm.inp_avg is elo_mean:
+		kwargs = dict([('fields',inp_fields)])
 	# Read data and seperate by teams
 	all_data = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'all.df'))
 	data_by_team = partition_data_to_teams(all_data)
@@ -229,9 +238,8 @@ def build_data(prm):
 				continue
 			# build game class instance and append
 			new_game = Game(this_prev_games, other_prev_games, prm.n_prev_games,
-				inp_fields, inp_fields, out_fields, prm.inp_avg, tar_data=game, axis=0)
-			if (new_game.this_inp_data.shape[0] > 0 and 
-				new_game.other_inp_data.shape[0] > 0):
+				inp_fields, inp_fields, out_fields, prm.inp_avg, tar_data=game, **kwargs)
+			if new_game.this_inp_data.shape[0] > 0 and new_game.other_inp_data.shape[0] > 0:
 				games.append(new_game)
 	print '\nDone.\n'
 	return games
