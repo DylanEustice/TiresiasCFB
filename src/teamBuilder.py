@@ -181,6 +181,7 @@ def concatenate_team_DataFrames(data_frames=[]):
 	"""
 	if len(data_frames) == 0:
 		comp_team_dir = os.path.join('data', 'compiled_team_data')
+		teams = load_json('all.json', fdir=comp_team_dir)
 		for tid, team in teams.iteritems():
 			fname = str(tid) + '_DataFrame.df'
 			data_frames.append(pd.read_pickle(os.path.join(comp_team_dir, fname)))
