@@ -38,17 +38,15 @@ class Team:
 			print "Game ID {} not found for {}".format(gid, self.name)
 			return None
 
-	def plot_elo(self, elo_dict, ax=None, ix=None, **kwargs):
+	def plot_stat(self, field, ax=None, **kwargs):
 		if ax is None:
 			fig = plt.figure()
 			ax = fig.add_subplot(111)
-		if ix is None:
-			team_elos = [e for seas in elo_dict[self.tid] for e in seas]
-		else:
-			team_elos = [e[ix] for seas in elo_dict[self.tid] for e in seas]
 		c1 = self.info['PrimaryColor']
 		c2 = self.info['SecondaryColor']
-		ax.plot(team_elos, '-o', markerfacecolor=c1, markeredgecolor=c2, color=c2, **kwargs)
+		stats = np.array(self.games[field])
+		dates = np.array(self.games['DateUtc'])
+		ax.plot(dates, stats, '-o', markerfacecolor=c1, markeredgecolor=c2, color=c2, **kwargs)
 		ax.grid('on')
 		return ax
 
