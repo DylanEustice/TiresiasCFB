@@ -301,8 +301,12 @@ def train_network(net, data, prm):
 	best_net = copy.deepcopy(net)
 	best_error = float('inf')
 	for i in range(prm.epochs / prm.update_freq):
-		error_tmp = net.train(train['norm_inp'], train['norm_tar'], epochs=prm.update_freq,
-			show=prm.show, lr=prm.lr)
+		if net.trainf is not nl.train.train_bfgs:
+			error_tmp = net.train(train['norm_inp'], train['norm_tar'],
+				epochs=prm.update_freq,	show=prm.show, lr=prm.lr)
+		else:
+			error_tmp = net.train(train['norm_inp'], train['norm_tar'],
+				epochs=prm.update_freq,	show=prm.show)
 		error_train.append(msef(train['norm_tar'], net.sim(train['norm_inp'])))
 		error_test.append(msef(test['norm_tar'], net.sim(test['norm_inp'])))
 		if error_test[-1] < best_error:
