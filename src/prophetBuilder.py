@@ -7,6 +7,7 @@ import copy
 import pickle
 import datetime
 from src.util import *
+from src.team import *
 
 # global paths
 IO_DIR = os.path.join('data', 'inout_fields')
@@ -15,11 +16,12 @@ PRM_DIR = os.path.join('data', 'network_params')
 
 
 class Params:
-	def __init__(self, io_name, io_dir, n_prev_games, min_date, trainf, lyr, train_pct,
-		lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func):
+	def __init__(self, io_name, io_dir, min_games, min_date, trainf, lyr, train_pct, lr,
+		epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func, date_diff,
+		home_only):
 		self.io_name = io_name
 		self.io_dir = io_dir
-		self.n_prev_games = n_prev_games
+		self.min_games = min_games
 		self.min_date = min_date
 		self.trainf = trainf
 		self.lyr = lyr
@@ -33,10 +35,12 @@ class Params:
 		self.ibias = ibias
 		self.inp_avg = inp_avg
 		self.norm_func = norm_func
+		self.date_diff = date_diff
+		self.home_only = home_only
 
 	@classmethod
 	def load(prms, fname, fdir=PRM_DIR):
-		this = prms(*[None]*16)
+		this = prms(*[None]*18)
 		with open(os.path.join(fdir, fname),"r") as f:
 			this = pickle.load(f)
 		return this
@@ -121,17 +125,77 @@ class Game:
 		return self.avg_inp_f(data, **self.avg_inp_kwargs)
 
 
-def build_prms_file(prm_name, io_name, io_dir=IO_DIR, n_prev_games=6,
+def build_dataset(prm, year=2015):
+	"""
+	prm:	paramters file
+	year:	current year (for conferences)
+	"""
+	# Load data
+	all_data = load_all_dataFrame()
+	teams = build_all_teams(all_data=all_data)
+	# Read I/O fields
+	io_fields = load_json(prm.io_name, fdir=prm.io_dir)
+	this_inp_fields = io_fields['inputs']
+	other_inp_fields = flip_this_other(this_inp_fields)
+	tar_fields = io_fields['outputs']
+	# Extract game training data
+	games = []
+	teams_dict = dict([(t.tid, t) for t in teams])
+	for t in teams:
+		games.extend(t.get_training_games(prm, teams_dict, this_inp_fields, 
+			other_inp_fields, tar_fields))
+	# Build dataset
+	full_dataset = {}
+	full_dataset['raw_inp'] = np.vstack([g['inp'] for g in games])
+	full_dataset['raw_tar'] = np.vstack([g['tar'] for g in games])
+	full_dataset['norm_inp'] = prm.norm_func(full_dataset['raw_inp'].astype('double'))
+	full_dataset['norm_tar'] = prm.norm_func(full_dataset['raw_tar'].astype('double'))
+	full_dataset['norm_func'] = str(prm.norm_func)
+	full_dataset['games'] = games
+	# Partition dataset and return
+	part_dataset = partition_data(full_dataset, train_pct=prm.train_pct)
+	return part_dataset
+
+
+def partition_data(data, train_pct=0.5):
+	"""
+	Randomly partition games for training and validation
+	games:		list of games to be partitioned
+	data:		input/target raw/normalized data
+	train_pct:	percentage of data used for training
+	"""
+	games = data['games']
+	gids = list(set(g['id'] for g in games))
+	rnd_vec = np.random.random(len(gids))
+	train_idx = rnd_vec < train_pct
+	train_gids = {id_ for i, id_ in enumerate(gids) if train_idx[i]}
+	# partition
+	train = {}
+	train['norm_inp'] = data['norm_inp'][np.array([g['id'] in train_gids for g in games]),:]
+	train['norm_tar'] = data['norm_tar'][np.array([g['id'] in train_gids for g in games]),:]
+	train['raw_inp'] = data['raw_inp'][np.array([g['id'] in train_gids for g in games]),:]
+	train['raw_tar'] = data['raw_tar'][np.array([g['id'] in train_gids for g in games]),:]
+	test = {}
+	test['norm_inp'] = data['norm_inp'][np.array([g['id'] not in train_gids for g in games]),:]
+	test['norm_tar'] = data['norm_tar'][np.array([g['id'] not in train_gids for g in games]),:]
+	test['raw_inp'] = data['raw_inp'][np.array([g['id'] not in train_gids for g in games]),:]
+	test['raw_tar'] = data['raw_tar'][np.array([g['id'] not in train_gids for g in games]),:]
+	out_data = {'train': train, 'test': test}
+	return out_data
+
+
+def build_prms_file(prm_name, io_name, io_dir=IO_DIR, min_games=6,
 	hid_lyr=10, trainf=nl.train.train_gdm, lyr=[nl.trans.SoftMax(),nl.trans.PureLin()],
 	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0,
-	ibias=1.0, inp_avg=np.mean, norm_func=normalize_data, min_date=datetime.datetime(1900,1,1)):
+	ibias=1.0, inp_avg=np.mean, norm_func=normalize_data, min_date=datetime.datetime(1900,1,1),
+	date_diff=datetime.timedelta(weeks=26), home_only=True):
 	"""
 	Build Params object and save to file
-	  Note: n_prev_games = -1 -> autoencoder
-	  		n_prev_games = 0  -> same game
+	  Note: min_games = -1 -> autoencoder
+	  		min_games = 0  -> same game
 	"""
-	prms = Params(io_name, io_dir, n_prev_games, min_date, trainf, lyr, train_pct,
-		lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func)
+	prms = Params(io_name, io_dir, min_games, min_date, trainf, lyr, train_pct, lr, 
+		epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func, date_diff)
 	with open(os.path.join(PRM_DIR, prm_name), 'w') as f:
 		pickle.dump(prms, f)
 
@@ -171,27 +235,6 @@ def train_net_from_scratch(prm, part_data=None):
 	net = setup_network(part_data['train'], prm)
 	net, error = train_network(net, part_data, prm)
 	return net, part_data, error
-
-
-def setup_train_data(prm):
-	"""
-	prm: paramters file
-	"""
-	# build all games and get data arrays
-	games = build_data(prm)
-	raw_inp = np.vstack([g.inp_data for g in games])
-	raw_tar = np.vstack([g.tar_data for g in games])
-	# standardize data
-	norm_inp = prm.norm_func(raw_inp.astype('double'))
-	norm_tar = prm.norm_func(raw_tar.astype('double'))
-	out_data = {}
-	out_data['norm_func'] = str(prm.norm_func)
-	out_data['games'] = games
-	out_data['norm_inp'] = norm_inp
-	out_data['norm_tar'] = norm_tar
-	out_data['raw_inp'] = raw_inp
-	out_data['raw_tar'] = raw_tar
-	return out_data
 
 
 def build_data(prm):
@@ -243,33 +286,6 @@ def build_data(prm):
 				games.append(new_game)
 	print '\nDone.\n'
 	return games
-
-
-def partition_data(data, train_pct=0.5):
-	"""
-	Randomly partition games for training and validation
-	games:		list of games to be partitioned
-	data:		input/target raw/normalized data
-	train_pct:	percentage of data used for training
-	"""
-	games = data['games']
-	gids = list(set(g.id for g in games))
-	rnd_vec = np.random.random(len(gids))
-	train_idx = rnd_vec < train_pct
-	train_gids = {id_ for i, id_ in enumerate(gids) if train_idx[i]}
-	# partition
-	train = {}
-	train['norm_inp'] = data['norm_inp'][np.array([g.id in train_gids for g in games]),:]
-	train['norm_tar'] = data['norm_tar'][np.array([g.id in train_gids for g in games]),:]
-	train['raw_inp'] = data['raw_inp'][np.array([g.id in train_gids for g in games]),:]
-	train['raw_tar'] = data['raw_tar'][np.array([g.id in train_gids for g in games]),:]
-	test = {}
-	test['norm_inp'] = data['norm_inp'][np.array([g.id not in train_gids for g in games]),:]
-	test['norm_tar'] = data['norm_tar'][np.array([g.id not in train_gids for g in games]),:]
-	test['raw_inp'] = data['raw_inp'][np.array([g.id not in train_gids for g in games]),:]
-	test['raw_tar'] = data['raw_tar'][np.array([g.id not in train_gids for g in games]),:]
-	out_data = {'train': train, 'test': test}
-	return out_data
 
 
 def setup_network(train_data, prm):
