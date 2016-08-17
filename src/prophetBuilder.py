@@ -195,7 +195,8 @@ def build_prms_file(prm_name, io_name, io_dir=IO_DIR, min_games=6,
 	  		min_games = 0  -> same game
 	"""
 	prms = Params(io_name, io_dir, min_games, min_date, trainf, lyr, train_pct, lr, 
-		epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func, date_diff)
+		epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func, date_diff,
+		home_only)
 	with open(os.path.join(PRM_DIR, prm_name), 'w') as f:
 		pickle.dump(prms, f)
 

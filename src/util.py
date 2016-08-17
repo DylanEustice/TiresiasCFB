@@ -4,6 +4,7 @@ import shutil
 import errno
 import pandas as pd
 import numpy as np
+import re
 
 # global paths
 IO_DIR = os.path.join('data', 'inout_fields')

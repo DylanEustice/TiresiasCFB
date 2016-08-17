@@ -66,20 +66,21 @@ class Team:
 		valid_games = self.games[ixValid]
 		for _, g in valid_games.iterrows():
 			if prm.min_games > 0:
+				# Must have enough games in this season
+				if self.games[self.games['Season'] == g['Season']].shape[0] < 8:
+					continue
 				# Don't repeat games if selected
-				if prm.home_only and g['is_home'].values[0] == 0:
+				if prm.home_only and g['is_home'] == 0:
 					continue
 				# Get games within a certain previous range
-				this_prev_games = get_games_in_range(
-					self.games, g['DateUtc'].values[0], prm.date_diff)
+				this_prev_games = get_games_in_range(self.games, g['DateUtc'], prm.date_diff)
 				# From previous games, build data array
 				if this_prev_games.shape[0] < prm.min_games:
 					continue
 				# Get data from other team
-				other_tid = g['other_TeamId'].values[0]
+				other_tid = g['other_TeamId']
 				other_team = teams_dict[other_tid]
-				other_prev_games = get_games_in_range(
-					other_team.games, g['DateUtc'].values[0], prm.date_diff)
+				other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], prm.date_diff)
 				# Build data
 				this_inp_data = build_data_from_games(this_prev_games, this_inp_fields)
 				other_inp_data = build_data_from_games(other_prev_games, other_inp_fields)
@@ -88,8 +89,9 @@ class Team:
 	def build_data_from_games(games, fields):
 		"""
 		"""
-		games.replace('-', np.nan)
-		data = np.asarray(games[fields], float)
+		data = np.asarray(games[fields].replace('-', np.nan), float)
+		if len(data.shape) == 1:
+			data = data.reshape([data.shape[0], 1])
 		data = data[~np.isnan(data).any(axis=1)]
 		return data
 
