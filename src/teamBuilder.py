@@ -1,6 +1,7 @@
 import os
 import re
-from src.util import load_json, dump_json, grab_scraper_data, debug_assert
+from src.util import load_json, dump_json, grab_scraper_data, debug_assert, load_all_dataFrame
+from src.team import *
 import pandas as pd
 import csv
 import datetime
@@ -18,6 +19,7 @@ def build_all_from_scratch(refresh_data=True, years='all'):
 	build_team_names()
 	build_team_DataFrames()
 	save_all_df_cols()
+	add_elo_conf_to_all()
 
 
 def compile_and_save_teams(years='all', refresh_data=False):
@@ -173,6 +175,38 @@ def build_team_DataFrames():
 		box_arr.to_pickle(os.path.join(comp_team_dir, fname))
 		data_frames.append(box_arr)
 	all_df = concatenate_team_DataFrames(data_frames=data_frames)
+	all_df.to_pickle(os.path.join(comp_team_dir, 'all.df'))
+
+
+def add_elo_conf_to_all():
+	"""
+	"""
+	comp_team_dir = os.path.join('data', 'compiled_team_data')
+	all_df = load_all_dataFrame()
+	# Add elo keys
+	add_elo_keys = ['wl_elo', 'off_elo', 'def_elo', 'cf_elo']
+	for pre in ['this_','other_']:
+		for key in add_elo_keys:
+			all_df[pre+key] = pd.Series(np.zeros(all_df.shape[0]), index=all_df.index)
+	# Add conference id keys
+	seasons = np.unique(all_df['Season'])
+	season_teams = {}
+	for season in seasons:
+		print season
+		season_teams[season] = build_all_teams(year=season)
+	# Build team to conference mapping
+	teamConf_map_seaons = {}
+	for season in seasons:
+		teamConf_map_seaons[season] = {}
+		for team in season_teams[season]:
+			teamConf_map_seaons[season][team.tid] = str(int(team.info['ConferenceId']))
+	this_confid = []
+	other_confid = []
+	for ttid,otid,season in zip(all_df['this_TeamId'], all_df['other_TeamId'], all_df['Season']):
+		this_confid.append(teamConf_map_seaons[season][ttid])
+		other_confid.append(teamConf_map_seaons[season][otid])
+	all_df['this_ConfId'] = pd.Series(this_confid, index=all_df.index)
+	all_df['other_ConfId'] = pd.Series(other_confid, index=all_df.index)
 	all_df.to_pickle(os.path.join(comp_team_dir, 'all.df'))
 
 
