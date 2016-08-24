@@ -64,9 +64,6 @@ def build_all_teams(year=2015):
 	for tid in teamids:
 		this_name = teamid_dict[str(int(tid))]
 		this_games = all_data[all_data['this_TeamId'] == tid]
-		if this_games.shape[0] > 0:
-			shift_year = 0
-			while np.all(this_games['Season'] != year-shift_year):
-				shift_year += 1
-			teams.append(Team(tid, this_name, this_games, year-shift_year))
+		if this_games.shape[0] > 0 and any(this_games['Season'] == year):
+			teams.append(Team(tid, this_name, this_games, year))
 	return teams
