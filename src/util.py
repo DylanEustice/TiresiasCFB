@@ -4,6 +4,7 @@ import shutil
 import errno
 import pandas as pd
 import numpy as np
+import re
 
 # global paths
 IO_DIR = os.path.join('data', 'inout_fields')
@@ -227,3 +228,18 @@ def test_corr(all_data, fields):
 	A, B = A[ixKeep], B[ixKeep]
 	corrcoef = np.corrcoef(A, B)[0,1]
 	return corrcoef
+
+
+def flip_this_other(fields):
+	"""
+	Flips locations of 'this' and 'other' in field array
+	"""
+	out_fields = ['' for f in fields]
+	for i, f in enumerate(fields):
+		if re.match('this', f):
+			out_fields[i] = re.sub('this', 'other', f)
+		elif re.match('other', f):
+			out_fields[i] = re.sub('other', 'this', f)
+		else:
+			out_fields[i] = f
+	return out_fields
