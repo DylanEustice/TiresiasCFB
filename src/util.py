@@ -61,6 +61,34 @@ def load_all_dataFrame():
 	all_data = all_data[all_data['other_conferenceId'] != '-1']
 	return all_data
 
+def add_archived_data(arch_years=range(2005,2014)):
+	"""
+	"""
+	# Load data
+	new_data = load_all_dataFrame()
+	new_data.to_pickle(os.path.join(COMP_TEAM_DATA, 'all_only_new.df'))
+	arch_data = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'archived.df'))
+	# Only keep fields shared by both
+	new_fields = list(new_data.keys())
+	arch_fields = list(arch_data.keys())
+	all_fields = sorted(list(set(new_fields + arch_fields)))
+	fields = []
+	for f in all_fields:
+		if f in new_fields and f in arch_fields:
+			fields.append(f)
+	# Now build a data frame with both
+	all_data = pd.DataFrame()
+	ixNew = new_data['Season'] > arch_years[-1]
+	ixArch = np.logical_or(arch_years[0] <= arch_data['Season'],
+						   arch_years[-1] >= arch_data['Season'])
+	use_new = new_data[ixNew]
+	use_arch = arch_data[ixArch]
+	ixSort = np.argsort(np.hstack([use_arch['DateUtc'].values, use_new['DateUtc'].values]))
+	for f in fields:
+		vals = np.hstack([use_arch[f].values, use_new[f].values])[ixSort]
+		all_data[f] = pd.Series(vals)
+	all_data.to_pickle(os.path.join(COMP_TEAM_DATA, 'all.df'))
+
 
 def copy_dir(src, dst):
 	"""
