@@ -203,8 +203,8 @@ def add_elo_conf_to_all():
 	this_confid = []
 	other_confid = []
 	for ttid,otid,season in zip(all_df['this_TeamId'], all_df['other_TeamId'], all_df['Season']):
-		this_confid.append(teamConf_map_seaons[season][ttid])
-		other_confid.append(teamConf_map_seaons[season][otid])
+		this_confid.append(float(teamConf_map_seaons[season][ttid]))
+		other_confid.append(float(teamConf_map_seaons[season][otid]))
 	all_df['this_ConfId'] = pd.Series(this_confid, index=all_df.index)
 	all_df['other_ConfId'] = pd.Series(other_confid, index=all_df.index)
 	all_df.to_pickle(os.path.join(comp_team_dir, 'all.df'))
