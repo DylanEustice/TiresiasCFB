@@ -100,27 +100,31 @@ def elo_obj_fun(params, all_data, games, dates_diff, season_range=range(1,11),
 
 
 def run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=10, iters=10, kill_rate=0.5,
-	evolve_rng=0.5,	season_range=range(1,11), elo_type="winloss", teamgid_map=None, team_elos=None):
+	evolve_rng=0.5,	season_range=range(1,11), elo_type="winloss", teamgid_map=None,
+	team_elos=None, static_fields=None, init_params=None):
 	"""
 	"""
 	all_data = util.load_all_dataFrame()
 	games, dates_diff = build_games(all_data)
 
-	if elo_type == "winloss":
-		init_params = [1., 1e-4, 1e-8, 9.5, 0.5, 1000]
-	elif elo_type == "offdef":
-		init_params = [1., 1e-4, 1e-8, 7.5, 0.5, 1000]
-	elif elo_type == "conf":
-		init_params = [1., 1e-3, 1e-6, 2., 0.5, 1000]
-	else:
-		raise Exception('elo_type must be  "winloss", "offdef", "conf"')
+	if init_params is None:
+		if elo_type == "winloss":
+			init_params = [1., 1e-4, 1e-8, 9.5, 0.5, 1000]
+		elif elo_type == "offdef":
+			init_params = [1., 1e-4, 1e-8, 7.5, 0.5, 1000]
+		elif elo_type == "conf":
+			init_params = [1., 1e-3, 1e-6, 2., 0.5, 1000]
+
+	if static_fields is None:
+		static_fields = [False for _ in range(len(init_params))]
+	static_fields = np.array(static_fields)
 
 	args = [all_data, games, dates_diff]
 	kwargs = dict([('season_range',season_range), ('elo_type',elo_type),
 				   ('teamgid_map',teamgid_map), ('team_elos',team_elos)])
 
 	return evolutionary_search(nPop, iters, kill_rate, evolve_rng,
-		elo_obj_fun_ranges, init_params, *args, **kwargs)
+		elo_obj_fun_ranges, init_params, static_fields, *args, **kwargs)
 
 
 def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=range(1,11), 
@@ -517,44 +521,21 @@ def build_games(all_data=None):
 	return games, dates_diff
 
 
-def build_elo_mat(teams, wl_elos, od_elos, cf_elos, teamgid_map, confgid_map,
-	games=[], dates_diff=[], season_range=[1,np.inf]):
+def build_elo_mats(all_data=None, distinct_home=False, season_range=range(2006,2016)):
 	"""
 	"""
-	if len(games) == 0 or len(dates_diff) == 0:
-		games, dates_diff = build_games()
-	# Build team to conference mapping
-	teamConf_map = team_to_conf_map(teams)
-	# Build arrays
-	X = []
-	y = []
-	ixSeason = 0
-	for i, game in enumerate(games):
-		# Check for season gap (100 days)
-		if i > 0 and dates_diff[i-1] > 100:
-			ixSeason += 1
-		# Get team's and their information
-		if ixSeason not in season_range:
-			continue
-		gid = game[0,0]
-		# Get team stats
-		tids = game[1,:]
-		ixGames = [teamgid_map[tid][ixSeason].index(gid) for tid in tids]
-		game_elos_wl = [wl_elos[tid][ixSeason][ix] for ix,tid in zip(ixGames,tids)]
-		game_elos_od = [od_elos[tid][ixSeason][ix] for ix,tid in zip(ixGames,tids)]
-		# Get conference stats
-		cids = [int(teamConf_map[ixSeason][tid]) for tid in tids]
-		ixGames = [confgid_map[cid][ixSeason].index(gid) for cid in cids]
-		game_elos_cf = [cf_elos[cid][ixSeason][ix] for ix,cid in zip(ixGames,cids)]
-		# Add to matrix
-		for ix in range(2):
-			wl_arr = [game_elos_wl[ix], game_elos_wl[1-ix]]
-			cf_arr = [game_elos_cf[ix], game_elos_cf[1-ix]]
-			od_arr = list(game_elos_od[ix]) + list(game_elos_od[1-ix])
-			X.append(wl_arr + cf_arr + od_arr)
-			y.append(game[3+ix,0])
-	X = np.array(X)
-	y = np.array(y)
-	if len(y.shape) < 2:
-		y = y.reshape(y.shape[0], 1)
+	if all_data is None:
+		all_data = util.load_all_dataFrame()
+	if distinct_home:
+		ixHome = all_data['is_home'] == True
+		all_data = all_data[ixHome]
+
+	ixInRange = np.array([season in season_range for season in all_data['Season'].values])
+
+	X_fields = default.all_elo_fields
+	X = np.matrix(np.vstack([all_data[f].values[ixInRange] for f in X_fields])).T
+
+	y_fields = ['this_Score', 'other_Score']
+	y = np.matrix(np.vstack([all_data[f].values[ixInRange] for f in y_fields])).T
+
 	return X, y
