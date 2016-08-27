@@ -6,13 +6,9 @@ import os
 import copy
 import pickle
 import datetime
-from src.util import *
-from src.team import *
-
-# global paths
-IO_DIR = os.path.join('data', 'inout_fields')
-COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
-PRM_DIR = os.path.join('data', 'network_params')
+import src.util as util
+from src.team import build_all_teams
+import src.default_parameters as default
 
 
 class Params:
@@ -40,13 +36,13 @@ class Params:
 		self.kwargs = {}
 
 	@classmethod
-	def load(prms, fname, fdir=PRM_DIR):
+	def load(prms, fname, fdir=default.prm_dir):
 		this = prms(*[None]*18)
 		with open(os.path.join(fdir, fname),"r") as f:
 			this = pickle.load(f)
 		return this
 
-	def save(self, fname, fdir=PRM_DIR):
+	def save(self, fname, fdir=default.prm_dir):
 		with open(os.path.join(fdir, fname),"w") as f:
 			pickle.dump(self, f)
 
@@ -131,10 +127,10 @@ def build_dataset(prm):
 	prm:	paramters file
 	"""
 	# Load data
-	all_data = load_all_dataFrame()
+	all_data = util.load_all_dataFrame()
 	teams = build_all_teams(all_data=all_data)
 	# Read I/O fields
-	io_fields = load_json(prm.io_name, fdir=prm.io_dir)
+	io_fields = util.load_json(prm.io_name, fdir=prm.io_dir)
 	inp_fields = io_fields['inputs']
 	tar_fields = io_fields['outputs']
 	# Keyword args for data averaging
@@ -188,10 +184,10 @@ def partition_data(data, train_pct=0.5):
 	return out_data
 
 
-def build_prms_file(prm_name, io_name, io_dir=IO_DIR, min_games=6,
+def build_prms_file(prm_name, io_name, io_dir=default.io_dir, min_games=6,
 	hid_lyr=10, trainf=nl.train.train_gdm, lyr=[nl.trans.SoftMax(),nl.trans.PureLin()],
 	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0,
-	ibias=1.0, inp_avg=np.mean, norm_func=normalize_data, min_date=datetime.datetime(1900,1,1),
+	ibias=1.0, inp_avg=np.mean, norm_func=util.normalize_data, min_date=datetime.datetime(1900,1,1),
 	date_diff=datetime.timedelta(weeks=26), home_only=True):
 	"""
 	Build Params object and save to file
@@ -201,11 +197,11 @@ def build_prms_file(prm_name, io_name, io_dir=IO_DIR, min_games=6,
 	prms = Params(io_name, io_dir, min_games, min_date, trainf, lyr, train_pct, lr, 
 		epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func, date_diff,
 		home_only)
-	with open(os.path.join(PRM_DIR, prm_name), 'w') as f:
+	with open(os.path.join(default.prm_dir, prm_name), 'w') as f:
 		pickle.dump(prms, f)
 
 
-def train_net_from_prms(prm=None, prm_name=None, data_file=None, fdir=DATA_DIR):
+def train_net_from_prms(prm=None, prm_name=None, data_file=None, fdir=default.data_dir):
 	"""
 	Load .prm file and train network based on those parameters
 	"""
@@ -249,7 +245,7 @@ def build_data(prm):
 	name provided. Games are used for prediction/training.
 	"""
 	# Read I/O fields
-	io_fields = load_json(prm.io_name, fdir=prm.io_dir)
+	io_fields = util.load_json(prm.io_name, fdir=prm.io_dir)
 	inp_fields = io_fields['inputs']
 	out_fields = io_fields['outputs']
 	# Decide keyword argument to use
@@ -258,7 +254,7 @@ def build_data(prm):
 	elif prm.inp_avg is elo_mean:
 		kwargs = dict([('fields',inp_fields)])
 	# Read data and seperate by teams
-	all_data = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'all.df'))
+	all_data = pd.read_pickle(os.path.join(default.comp_team_dir, 'all.df'))
 	data_by_team = partition_data_to_teams(all_data)
 	# Build sets of inputs and target outputs for all possible games
 	games = []

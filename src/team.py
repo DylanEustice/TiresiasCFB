@@ -1,40 +1,10 @@
-from src.util import *
+import src.util as util
 import matplotlib.pyplot as plt
 import os
 import datetime
+import src.default_parameters as default
+import numpy as np
 
-# Team name mapping (TEMPORARY HACK)
-TEAM_ALT_MAPPING = {
-	"Army": "Army West Point", 
-	"Southern Mississippi": "Southern Miss", 
-	"Central Florida": "UCF", 
-	"Middle Tennessee State": "Middle Tennessee", 
-	"Brigham Young": "BYU", 
-	"Southern California": "USC", 
-	"Mississippi": "Ole Miss", 
-	"Southern Methodist": "SMU",
-	"Texas Christian": "TCU",
-	"Troy State": "Troy",
-	"Florida International": "FIU",
-	"Texas-San Antonio": "UTSA"
-}
-NO_TEAM = {
-	"Massachusetts": range(2000,2012),
-	"UAB": range(2015, 2017),
-	"Western Kentucky": range(2000,2007),
-	"Appalachian State": range(2000,2014),
-	"Georgia Southern": range(2000,2014),
-	"Texas State": range(2000,2012),
-	"Old Dominion": range(2000,2014),
-	"South Alabama": range(2000,2012),
-	"Georgia State": range(2000,2013),
-	"Texas-San Antonio": range(2000,2012),
-	"Charlotte": range(2000,2015),
-	"South Florida": [2000],
-	"Troy State": [2000],
-	"Florida International": range(2000,2005),
-	"Florida Atlantic": range(2000,2005)
-}
 
 class Team:
 	def __init__(self, tid, name, games, years, schedule):
@@ -47,16 +17,16 @@ class Team:
 		for year in self.seasons:
 			team_dir = os.path.join('data', str(int(year)), 'teams')
 			try:
-				self.info[year] = load_json(self.name + '.json', fdir=team_dir)
+				self.info[year] = util.load_json(self.name + '.json', fdir=team_dir)
 			except:
-				if self.name in NO_TEAM and year in NO_TEAM[self.name]:
+				if self.name in default.no_team and year in default.no_team[self.name]:
 					continue
-				self.info[year] = load_json(TEAM_ALT_MAPPING[self.name] + '.json', fdir=team_dir)
+				self.info[year] = util.load_json(default.team_alt_mapping[self.name] + '.json', fdir=team_dir)
 		self._elo_params = {}
-		self._elo_params['this_wl_elo'] = np.loadtxt(os.path.join(ELO_DIR, 'Optimal_Winloss_Params.txt'))
-		self._elo_params['this_off_elo'] = np.loadtxt(os.path.join(ELO_DIR, 'Optimal_Offdef_Params.txt'))
+		self._elo_params['this_wl_elo'] = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Winloss_Params.txt'))
+		self._elo_params['this_off_elo'] = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Offdef_Params.txt'))
 		self._elo_params['this_def_elo'] = self._elo_params['this_off_elo']
-		self._elo_params['this_cf_elo'] = np.loadtxt(os.path.join(ELO_DIR, 'Optimal_Conf_Params.txt'))
+		self._elo_params['this_cf_elo'] = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Conf_Params.txt'))
 		self.elos = self._get_current_elos()
 
 	def __eq__(self, id_):
@@ -105,8 +75,7 @@ class Team:
 		c2 = self.info[self.seasons[-1]]['SecondaryColor']
 		stats = np.array(self.games[field])
 		dates = np.array(self.games['DateUtc'])
-		ax.plot(dates, stats, '-o', markerfacecolor=c1, markeredgecolor=c2,
-			color=c2, **kwargs)
+		ax.plot(dates, stats, '-o', markerfacecolor=c1, markeredgecolor=c2, color=c2, **kwargs)
 		ax.grid('on')
 		return ax
 
@@ -146,6 +115,7 @@ class Team:
 				games.append(this_game)
 		return games
 
+
 def build_data_from_games(games, fields):
 	"""
 	"""
@@ -154,6 +124,7 @@ def build_data_from_games(games, fields):
 		data = data.reshape([data.shape[0], 1])
 	data = data[~np.isnan(data).any(axis=1)]
 	return data
+
 
 def get_games_in_range(games, curr_date, max_diff):
 	"""
@@ -172,10 +143,10 @@ def build_all_teams(years=range(2005,2017), all_data=None):
 	"""
 	# Load data
 	if all_data is None:
-		all_data = load_all_dataFrame()
-	schedule = load_schedule()
+		all_data = util.load_all_dataFrame()
+	schedule = util.load_schedule()
 	# Load team info
-	teamid_dict = load_json('team_names.json', fdir='data')
+	teamid_dict = util.load_json('team_names.json', fdir='data')
 	teamids = sorted(set([tid for tid in all_data['this_TeamId']]))
 	teams = []
 	for tid in teamids:

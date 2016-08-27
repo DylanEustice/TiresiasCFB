@@ -5,22 +5,7 @@ import errno
 import pandas as pd
 import numpy as np
 import re
-
-# global paths
-IO_DIR = os.path.join('data', 'inout_fields')
-COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
-PRM_DIR = os.path.join('data', 'network_params')
-DATA_DIR = os.path.join('data', 'data_sets')
-ELO_DIR = os.path.join('data', 'elo')
-
-
-def debug_assert(condition):
-	try:
-		assert(condition)
-	except AssertionError:
-		import pdb
-		pdb.set_trace()
-		print "Debugger set. Enter 'u' to go up in stack frame"
+import src.default_parameters as default
 
 
 def ensure_path(path):
@@ -57,7 +42,7 @@ def load_all_dataFrame():
 	"""
 	Load data then filter bad data and FCS games
 	"""
-	all_data = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'all.df'))
+	all_data = pd.read_pickle(os.path.join(default.comp_team_dir, 'all.df'))
 	all_data = all_data[all_data['this_Score'] != '-']
 	all_data = all_data[all_data['other_conferenceId'] != '-1']
 	return all_data
@@ -67,7 +52,7 @@ def load_schedule():
 	"""
 	Load future games
 	"""
-	schedule = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'schedule.df'))
+	schedule = pd.read_pickle(os.path.join(default.comp_team_dir, 'schedule.df'))
 	return schedule
 
 
@@ -76,8 +61,8 @@ def add_archived_data(arch_years=range(2005,2013)):
 	"""
 	# Load data
 	new_data = load_all_dataFrame()
-	new_data.to_pickle(os.path.join(COMP_TEAM_DATA, 'all_only_new.df'))
-	arch_data = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'archived.df'))
+	new_data.to_pickle(os.path.join(default.comp_team_dir, 'all_only_new.df'))
+	arch_data = pd.read_pickle(os.path.join(default.comp_team_dir, 'archived.df'))
 	# Only keep fields shared by both
 	new_fields = list(new_data.keys())
 	arch_fields = list(arch_data.keys())
@@ -97,7 +82,7 @@ def add_archived_data(arch_years=range(2005,2013)):
 	for f in fields:
 		vals = np.hstack([use_arch[f].values, use_new[f].values])[ixSort]
 		all_data[f] = pd.Series(vals)
-	all_data.to_pickle(os.path.join(COMP_TEAM_DATA, 'all.df'))
+	all_data.to_pickle(os.path.join(default.comp_team_dir, 'all.df'))
 
 
 def copy_dir(src, dst):
@@ -128,7 +113,7 @@ def extract_lines_from_schedule():
 	overUnder = schedule['OverUnder'].values[ixUse]
 	gids = schedule['Id'].values[ixUse]
 	try:
-		lines = load_json('lines.json', fdir=COMP_TEAM_DATA)
+		lines = load_json('lines.json', fdir=default.comp_team_dir)
 	except IOError:
 		lines = {}
 	for i, gid in enumerate(gids):
@@ -142,7 +127,7 @@ def extract_lines_from_schedule():
 				lines[gid]['Spread'] = spreads[i]
 			if not np.isnan(overUnder[i]):
 				lines[gid]['OverUnder'] = overUnder[i]
-	dump_json(lines, 'lines.json', fdir=COMP_TEAM_DATA)
+	dump_json(lines, 'lines.json', fdir=default.comp_team_dir)
 
 
 def grab_scraper_data(src=os.path.join('..','BarrelRollCFBData','data'),

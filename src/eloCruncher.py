@@ -1,15 +1,12 @@
 import numpy as np
 import pandas as pd
 import datetime
-from src.util import *
-from src.team import *
+import src.util as util
+from src.team import build_all_teams
 from src.searchAlgorithms import evolutionary_search
 import matplotlib.pyplot as plt
 import os
-
-# global paths
-COMP_TEAM_DATA = os.path.join('data', 'compiled_team_data')
-ELO_DIR = os.path.join('data', 'elo')
+import src.default_parameters as default
 
 
 def elo_obj_fun_ranges(params, all_data, games, dates_diff, elo_type="winloss",
@@ -77,7 +74,7 @@ def run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=10, iters=10, k
 	evolve_rng=0.5,	season_range=range(1,11), elo_type="winloss", teamgid_map=None, team_elos=None):
 	"""
 	"""
-	all_data = load_all_dataFrame()
+	all_data = util.load_all_dataFrame()
 	games, dates_diff = build_games(all_data)
 
 	if elo_type == "winloss":
@@ -92,7 +89,7 @@ def run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=10, iters=10, k
 	args = [all_data, games, dates_diff]
 	kwargs = dict([('season_range',season_range), ('elo_type',elo_type),
 				   ('teamgid_map',teamgid_map), ('team_elos',team_elos)])
-	
+
 	return evolutionary_search(nPop, iters, kill_rate, evolve_rng,
 		elo_obj_fun_ranges, init_params, *args, **kwargs)
 
@@ -105,8 +102,8 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=ran
 	elo_diff = []
 	ixSeason = 0
 	for i, game in enumerate(games):
-		# Check for season gap (100 days)
-		if i > 0 and dates_diff[i-1] > 100:
+		# Check for season gap
+		if i > 0 and dates_diff[i-1] > default.season_day_sep:
 			ixSeason += 1
 		# Don't do this for first min_season seasons
 		if ixSeason in season_range:
@@ -233,7 +230,7 @@ def append_elos_to_dataFrame():
 	"""
 	"""
 	elos, wl_elos, off_elos, def_elos, cf_elos = gen_elo_files()
-	all_data = load_all_dataFrame()
+	all_data = util.load_all_dataFrame()
 	gids = [gid for gid in all_data['Id']]
 	tids = [tid for tid in all_data['this_TeamId']]
 	types = ['wl_elo', 'off_elo', 'def_elo', 'cf_elo']
@@ -293,7 +290,7 @@ def gen_elo_files(shift=True):
 								  def_elos[tid][ixSeason][ix+s],
 								  cf_elos[cid][ixSeason][ixConf_elos]]
 	# Save files to JSON
-	dump_json(elos, "elos.json", fdir=ELO_DIR)
+	util.dump_json(elos, "elos.json", fdir=default.elo_dir)
 	return elos, wl_elos, off_elos, def_elos, cf_elos
 
 
@@ -301,11 +298,11 @@ def run_best_elos():
 	"""
 	"""
 	# Load parameter files
-	wl_params = np.loadtxt(os.path.join(ELO_DIR, 'Optimal_Winloss_Params.txt'))
-	od_params = np.loadtxt(os.path.join(ELO_DIR, 'Optimal_Offdef_Params.txt'))
-	cf_params = np.loadtxt(os.path.join(ELO_DIR, 'Optimal_Conf_Params.txt'))
+	wl_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Winloss_Params.txt'))
+	od_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Offdef_Params.txt'))
+	cf_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Conf_Params.txt'))
 	# Load data
-	all_data = load_all_dataFrame()
+	all_data = util.load_all_dataFrame()
 	games, dates_diff = build_games()
 	teams = build_all_teams()
 	# Run elos
@@ -348,8 +345,8 @@ def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 	# Walk though games
 	ixSeason = 0
 	for i, game in enumerate(games):
-		# Check for season gap (100 days)
-		if i > 0 and dates_diff[i-1] > 100:
+		# Check for season gap
+		if i > 0 and dates_diff[i-1] > default.season_day_sep:
 			ixSeason += 1
 			for id_, elo in elo_dict.iteritems():
 				curr_elo = elo_dict[id_][-1][-1]
@@ -468,7 +465,7 @@ def build_games(all_data=None):
 	"""
 	# Load data
 	if all_data is None:
-		all_data = load_all_dataFrame()
+		all_data = util.load_all_dataFrame()
 	# Sort unique game ids by date
 	gids, ix_gids = np.unique(all_data['Id'], return_index=True)
 	ix_date = np.argsort(np.array(all_data['DateUtc'])[ix_gids])
