@@ -128,7 +128,7 @@ def run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=10, iters=10, k
 
 
 def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=range(1,11), 
-	do_print=True, elo_type="winloss", avg_score=26.9, season_quartile=range(4)):
+	do_print=True, elo_type="winloss", season_quartile=range(4)):
 	"""
 	"""
 	pr_result = [] # (Pr_win, correct)
@@ -172,8 +172,8 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=ran
 					offdef_elos = [elos[j][0], elos[1-j][1]]
 					Pr_win = max(elo_game_probs(offdef_elos))
 					ixMax_elo = np.argmax(offdef_elos)
-					correct = ((ixMax_elo==1 and game[3,j] < avg_score) or
-							   (ixMax_elo==0 and game[3,j] >= avg_score))
+					correct = ((ixMax_elo==1 and game[3,j] < default.avg_score) or
+							   (ixMax_elo==0 and game[3,j] >= default.avg_score))
 					pr_result.append((Pr_win, correct))
 					elo_diff.append(abs(offdef_elos[0]-offdef_elos[1]))
 	if do_print:
@@ -349,9 +349,9 @@ def run_best_elos():
 
 
 def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
-	dates_diff=[], elo_type="winloss", avg_score=26.9, start_season=0):
+	dates_diff=[], elo_type="winloss", start_season=0):
 	"""
-	elo_type: "winloss", "offdef"
+	elo_type: "winloss", "(p/r)offdef"
 	"""
 	if len(games) == 0 or len(dates_diff) == 0:
 		games, dates_diff = build_games()
@@ -360,6 +360,19 @@ def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 	season_regress = elo_params[4]
 	init_elo = elo_params[5]
 	max_elo_diff = ((4*params[0]*params[2] + params[1]**2)**0.5 - params[1]) / (2*params[2]) - 1
+	# Get type
+	is_winloss = elo_type == "winloss"
+	is_offdef = elo_type == "offdef" or elo_type == "poffdef" or elo_type == "roffdef"
+	assert is_winloss or is_offdef, "elo_type must be  'winloss' or '(p/r)offdef'"
+	if elo_type == "offdef":
+		compare_avg = default.avg_score
+		MoV_field = 3
+	elif elo_type == "poffdef":
+		compare_avg = default.avg_passing
+		MoV_field = 7
+	elif elo_type == "roffdef":
+		compare_avg = default.avg_rushing
+		MoV_field = 9
 	# Set up elo dictionary
 	tids = np.unique(all_data['this_TeamId'])
 	elo_dict = {}
@@ -367,12 +380,10 @@ def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 	for tid in tids:
 		elo_dict[tid] = []
 		elo_dict[tid].append([])
-		if elo_type == "winloss":
+		if is_winloss:
 			elo_dict[tid][-1].append(init_elo)
-		elif elo_type == "offdef":
+		elif is_offdef:
 			elo_dict[tid][-1].append((init_elo, init_elo))
-		else:
-			raise Exception('elo_type must be  "winloss" or "offdef"')
 		teamgid_map[tid] = []
 		teamgid_map[tid].append([])
 	# Walk though games
@@ -384,24 +395,24 @@ def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 			for id_, elo in elo_dict.iteritems():
 				curr_elo = elo_dict[id_][-1][-1]
 				elo_dict[id_].append([])
-				if elo_type == "winloss":
+				if is_winloss:
 					start_elo = curr_elo + season_regress*(init_elo - curr_elo)
-				elif elo_type == "offdef":
+				elif is_offdef:
 					start_elo = tuple(e + season_regress*(init_elo - e) for e in curr_elo)
 				elo_dict[id_][ixSeason].append(start_elo)
 				teamgid_map[id_].append([])
 		if ixSeason < start_season:
 			continue
 		# Recalculate Elos with results of game
-		if elo_type == "winloss":
+		if is_winloss:
 			MoV = -np.diff(game[3:,:])
 			assert(MoV[0,0] == -MoV[1,0])
-		elif elo_type == "offdef":
-			MoV = game[3,:] - avg_score
+		elif is_offdef:
+			MoV = game[MoV_field,:] - compare_avg
 		# Get team's and their information
 		elos = [elo_dict[tid][ixSeason][-1] for tid in game[1,:]]
 		# Calculate parameters based on results
-		if elo_type == "winloss":
+		if is_winloss:
 			elo_diff = elos[0] - elos[1] if MoV[0,0] > 0 else elos[1] - elos[0]
 			elo_diff = np.sign(elo_diff) * min(abs(elo_diff), max_elo_diff)
 			new_elos = [rating_adjuster(elos[j], params, elo_diff, MoV[j,0]) for j in range(2)]
@@ -409,7 +420,7 @@ def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 				assert(round(sum(elos),3) == round(sum(new_elos),3))
 			except AssertionError:
 				import pdb; pdb.set_trace()
-		elif elo_type == "offdef":
+		elif is_offdef:
 			elo_diff = [elos[j][0] - elos[1-j][1] if MoV[j] > 0 else
 						elos[1-j][1] - elos[j][0] for j in range(2)]
 			elo_diff = [np.sign(ed) * min(abs(ed), max_elo_diff) for ed in elo_diff]
@@ -506,7 +517,9 @@ def build_games(all_data=None):
 	data = np.array([all_data['Id'],
 		all_data['this_TeamId'], all_data['other_TeamId'],
 		all_data['this_Score'], all_data['other_Score'],
-		all_data['this_ConfId'], all_data['other_ConfId']])
+		all_data['this_ConfId'], all_data['other_ConfId'],
+		all_data['this_Passing Yds'], all_data['other_Passing Yds'],
+		all_data['this_Rushing Yds'], all_data['other_Rushing Yds']])
 	# Find time between games
 	dates = np.array([d for d in all_data['DateUtc']])[ix_gids][ix_date]
 	dates_diff = np.array([(dates[i+1]-dates[i]).total_seconds() for i in range(len(dates)-1)])

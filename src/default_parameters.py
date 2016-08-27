@@ -9,6 +9,10 @@ all_elo_fields = ['this_wl_elo', 'this_cf_elo', 'this_off_elo', 'this_def_elo',
 season_day_sep = 100
 this_year = 2016
 
+avg_score = 26.9
+avg_rushing = 160.3
+avg_passing = 225.7
+
 # Directories
 comp_team_dir = os.path.join('data', 'compiled_team_data')
 io_dir = os.path.join('data', 'inout_fields')
