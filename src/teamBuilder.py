@@ -12,6 +12,8 @@ import src.default_parameters as default
 def build_all_from_scratch(refresh_data=True, years='all'):
 	print "Compiling teams .."
 	compile_and_save_teams(years=years, refresh_data=refresh_data)
+	index_game_folders()
+	build_teamgame_index()
 	compile_fields()
 	print "Building team info and data ..."
 	build_team_ids()
@@ -19,6 +21,74 @@ def build_all_from_scratch(refresh_data=True, years='all'):
 	build_team_DataFrames()
 	save_all_df_cols()
 	add_elo_conf_to_all()
+	add_archived_data()
+	build_team_schedules()
+
+
+def index_game_folders():
+	"""
+	Create a dictionary with the gameid as the
+	key and the path to the containing folder as
+	the value.
+	"""
+	game_index = {}
+	for root, dirs, files in os.walk('data'):
+		for f in dirs:
+			try:
+				gameid = int(re.search(r'game_(?P<id>\d+)', f).group('id'))
+				game_index[gameid] = os.path.join(root, f)
+			except AttributeError:
+				pass
+	dump_json(game_index, 'game_index.json', fdir='data', indent=4)
+
+
+def build_teamgame_index():
+	teamgame_index = {}
+	for root, dirs, files in os.walk('data'):
+		for f in files:
+			try:
+				gameid = re.match(r'gameinfo_(?P<gameid>\d+).json', f).group('gameid')
+				gameinfo = load_json(os.path.join(root, f))
+				try:
+					teamgame_index[gameinfo['HomeTeamId']].append(gameid)
+				except KeyError:
+					teamgame_index[gameinfo['HomeTeamId']] = [gameid]
+				try:
+					teamgame_index[gameinfo['AwayTeamId']].append(gameid)
+				except KeyError:
+					teamgame_index[gameinfo['AwayTeamId']] = [gameid]
+			except AttributeError:
+				pass
+	dump_json(teamgame_index, 'teamgame_index.json', fdir='data', indent=4)
+
+
+def add_archived_data(arch_years=range(2005,2013)):
+	"""
+	"""
+	# Load data
+	new_data = load_all_dataFrame()
+	new_data.to_pickle(os.path.join(default.comp_team_dir, 'all_only_new.df'))
+	arch_data = pd.read_pickle(os.path.join(default.comp_team_dir, 'archived.df'))
+	# Only keep fields shared by both
+	new_fields = list(new_data.keys())
+	arch_fields = list(arch_data.keys())
+	all_fields = sorted(list(set(new_fields + arch_fields)))
+	fields = []
+	for f in all_fields:
+		if f in new_fields and f in arch_fields:
+			fields.append(f)
+	# Now build a data frame with both
+	all_data = pd.DataFrame()
+	ixNew = new_data['Season'] > arch_years[-1]
+	ixArch = np.logical_or(arch_years[0] <= arch_data['Season'],
+						   arch_years[-1] >= arch_data['Season'])
+	use_new = new_data[ixNew]
+	use_arch = arch_data[ixArch]
+	ixSort = np.argsort(np.hstack([use_arch['DateUtc'].values, use_new['DateUtc'].values]))
+	for f in fields:
+		vals = np.hstack([use_arch[f].values, use_new[f].values])[ixSort]
+		all_data[f] = pd.Series(vals)
+	all_data.to_pickle(os.path.join(default.comp_team_dir, 'all.df'))
 
 
 def compile_and_save_teams(years='all', refresh_data=False):
