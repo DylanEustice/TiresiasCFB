@@ -9,6 +9,35 @@ import os
 import src.default_parameters as default
 
 
+def train_and_save_all_elos(nPop=10, iters=50, **kwargs):
+	"""
+	"""
+	games, dates_diff = build_games()
+	all_data = load_all_dataFrame()
+
+	# winloss
+	pop_wl, best_fit_wl = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=200,
+		iters=50, elo_type="winloss", **kwargs)
+	wl_elos, teamgid_map = run_elos(all_data, games=games, dates_diff=dates_diff, 
+			elo_params=pop_wl[0,:], elo_type="winloss")
+
+	pop_od, best_fit_od = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=200,
+		iters=50, elo_type="offdef", **kwargs)
+	od_elos, teamgid_map = run_elos(all_data, games=games, dates_diff=dates_diff, 
+			elo_params=pop_od[0,:], elo_type="offdef")
+
+	pop_cf, best_fit_cf = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=200,
+		iters=50, elo_type="conf", teamgid_map=teamgid_map, team_elos=wl_elos, **kwargs)
+	cf_elos, confgid_map = run_conference_elos(teamgid_map, wl_elos, games=games,
+		dates_diff=dates_diff, elo_params=pop_cf[0,:])
+
+	np.savetxt(os.path.join(default.elo_dir, 'Optimal_Winloss_Params.txt'), pop_wl[0,:])
+	np.savetxt(os.path.join(default.elo_dir, 'Optimal_Offdef_Params.txt'), pop_od[0,:])
+	np.savetxt(os.path.join(default.elo_dir, 'Optimal_Conf_Params.txt'), pop_cf[0,:])
+
+	return pop_wl, best_fit_wl, pop_od, best_fit_od, pop_cf, best_fit_cf
+
+
 def elo_obj_fun_ranges(params, all_data, games, dates_diff, elo_type="winloss",
 	teamgid_map=None, team_elos=None, season_range=range(1,11)):
 	"""
