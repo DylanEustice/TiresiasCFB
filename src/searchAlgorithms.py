@@ -1,11 +1,12 @@
 import numpy as np
 
-def evolutionary_search(nPop, iters, kill_rate, evolve_rng, obj_fun, params, *args, **kwargs):
+def evolutionary_search(nPop, iters, kill_rate, evolve_rng, obj_fun, params,
+	static_fields, *args, **kwargs):
 	"""
 	"""
 	# Initialize population
 	init_pop = np.array(params).reshape(1, len(params))
-	pop = evolve_pop(init_pop, evolve_rng, pop_inc=nPop)
+	pop = evolve_pop(init_pop, evolve_rng, static_fields, pop_inc=nPop)
 	if int(nPop * kill_rate) != nPop * kill_rate:
 		tmp_nPop = nPop
 		nPop = int(int(nPop * kill_rate) / kill_rate)
@@ -20,15 +21,16 @@ def evolutionary_search(nPop, iters, kill_rate, evolve_rng, obj_fun, params, *ar
 		fitness = oracle(obj_fun, pop, *args, **kwargs)
 		ixFit = np.argsort(fitness)
 		tmp_pop = np.vstack([pop[ix,:] for ix in ixFit[:nSurvive]])
-		pop = evolve_pop(tmp_pop, evolve_rng, pop_inc=nPop_inc)
+		pop = evolve_pop(tmp_pop, evolve_rng, static_fields, pop_inc=nPop_inc)
 		best_fit.append(fitness[ixFit[0]])
 	return pop, best_fit
 
 
-def evolve_pop(pop, evolve_rng, pop_inc=1):
+def evolve_pop(pop, evolve_rng, static_fields, pop_inc=1):
 	"""
 	"""
 	rand_mat = np.random.random([int((pop_inc-1)*pop.shape[0]), pop.shape[1]])
+	rand_mat[:,static_fields] = 0.5
 	pop_tile = np.tile(pop, (pop_inc-1, 1))
 	offspring = pop_tile + pop_tile * evolve_rng * 2 * (rand_mat - 0.5)
 	return np.vstack([pop, offspring])
