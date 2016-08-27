@@ -1,13 +1,12 @@
 import os
 import re
 from src.util import load_json, dump_json, grab_scraper_data, debug_assert, load_all_dataFrame
-from src.team import *
+from src.team import build_all_teams
 import pandas as pd
 import csv
 import datetime
-
-
-this_year = 2016
+from dateutil import parser
+import src.default_parameters as default
 
 
 def build_all_from_scratch(refresh_data=True, years='all'):
@@ -33,6 +32,68 @@ def compile_and_save_teams(years='all', refresh_data=False):
 		dump_json(team, team['school'] + '.json', fdir=fdir, indent=4)
 
 
+def build_team_schedules(years='all'):
+	"""
+	Make a data frame with only future games
+	"""
+	teams = {}
+	today = datetime.datetime.now()
+	game_index = load_json(os.path.join('data', 'game_index.json'))
+	teamgame_index = load_json(os.path.join('data', 'teamgame_index.json'))
+	all_schedule_gids = []
+	if years == 'all':
+		years =[2016]
+	for year in years:
+		try:
+			yeardir = os.path.join('data', str(year))
+		except IOError:
+			continue
+		# Add new teams' year
+		for root, dirs, files in os.walk(os.path.join(yeardir, 'teams')):
+			for f in files:
+				newteam = load_json(os.path.join(root, f))
+				try:
+					setup_team_year(year, teams, newteam)
+				except KeyError:
+					init_team(teams, newteam)
+					setup_team_year(year, teams, newteam)
+		# Add all games to teams
+		for teamid in teams:
+			for gameid in teamgame_index[str(teamid)]:
+				game_path = game_index[gameid]
+				game_year = re.search(r'data\W+(?P<year>\d{4})\W+gameinfo', game_path).group('year')
+				if game_year == str(year):
+					teams[teamid]['games'][str(year)][gameid] = {}
+					gameinfo = load_json('gameinfo_'+gameid+'.json', fdir=game_path)
+					date = parser.parse(gameinfo['DateUtc'])
+					if date >= today:
+						teams[teamid]['games'][str(year)][gameid]['gameinfo'] = gameinfo
+	schedule = pd.DataFrame(columns=default.schedule_columns)
+	for tid, team in teams.iteritems():
+		for year in team['games'].keys():
+			for gid in team['games'][year].keys():
+				info = team['games'][year][gid]['gameinfo']
+				is_home = info['HomeTeamId'] == tid
+				try:
+					# set spread to negative if away
+					spread = (1 - 2*is_home) * float(info['Spread'])
+				except:
+					spread = np.nan
+				try:
+					overunder = float(info['OverUnder'])
+				except:
+					overunder = np.nan
+				# Assumes id, this_tid, other_tid, date, season, week, spread, overunder, is_home
+				row = [
+					gid, int(tid), int(info['AwayTeamId']) if home else int(info['HomeTeamId']),
+					parser.parse(info['DateUtc']), int(info['Season']), int(info['Week']), 
+					spread, overunder, is_home
+				]
+				schedule = schedule.append(pd.Series(row, index=default.schedule_columns), ignore_index=True)
+	schedule.to_pickle(os.path.join(default.comp_team_dir, 'schedule.df'))
+	return schedule
+
+
 def compile_teams(years='all', refresh_data=False):
 	"""
 	Compile teams from inputted year range into dictionaries.
@@ -45,7 +106,7 @@ def compile_teams(years='all', refresh_data=False):
 	game_index = load_json(os.path.join('data', 'game_index.json'))
 	teamgame_index = load_json(os.path.join('data', 'teamgame_index.json'))
 	if years == 'all':
-		years = range(2000, this_year)
+		years = range(2000, default.this_year)
 	for year in years:
 		try:
 			yeardir = os.path.join('data', str(year))
@@ -166,8 +227,7 @@ def build_team_DataFrames():
 	"""
 	Build pandas DataFrame for each team and saves as pickle file
 	"""
-	comp_team_dir = os.path.join('data', 'compiled_team_data')
-	teams = load_json('all.json', fdir=comp_team_dir)
+	teams = load_json('all.json', fdir=default.comp_team_dir)
 	data_frames = []
 	for tid, team in teams.iteritems():
 		box_arr = team_boxscore_to_array(team, tid)
@@ -175,13 +235,12 @@ def build_team_DataFrames():
 		box_arr.to_pickle(os.path.join(comp_team_dir, fname))
 		data_frames.append(box_arr)
 	all_df = concatenate_team_DataFrames(data_frames=data_frames)
-	all_df.to_pickle(os.path.join(comp_team_dir, 'all.df'))
+	all_df.to_pickle(os.path.join(default.comp_team_dir, 'all.df'))
 
 
 def add_elo_conf_to_all():
 	"""
 	"""
-	comp_team_dir = os.path.join('data', 'compiled_team_data')
 	all_df = load_all_dataFrame()
 	# Add elo keys
 	add_elo_keys = ['wl_elo', 'off_elo', 'def_elo', 'cf_elo']
@@ -190,35 +249,33 @@ def add_elo_conf_to_all():
 			all_df[pre+key] = pd.Series(np.zeros(all_df.shape[0]), index=all_df.index)
 	# Add conference id keys
 	seasons = np.unique(all_df['Season'])
-	season_teams = {}
-	for season in seasons:
-		print season
-		season_teams[season] = build_all_teams(year=season)
+	teams = build_all_teams(years=seasons, all_data=all_data)
 	# Build team to conference mapping
-	teamConf_map_seaons = {}
+	teamConf_map_seasons = {}
 	for season in seasons:
-		teamConf_map_seaons[season] = {}
-		for team in season_teams[season]:
-			teamConf_map_seaons[season][team.tid] = str(int(team.info['ConferenceId']))
+		teamConf_map_seasons[season] = {}
+		for team in teams:
+			if season in team.info:
+				cid = float(team.info[season]['ConferenceId'])
+				teamConf_map_seasons[season][team.tid] = cid
 	this_confid = []
 	other_confid = []
 	for ttid,otid,season in zip(all_df['this_TeamId'], all_df['other_TeamId'], all_df['Season']):
-		this_confid.append(float(teamConf_map_seaons[season][ttid]))
-		other_confid.append(float(teamConf_map_seaons[season][otid]))
+		this_confid.append(teamConf_map_seasons[season][ttid])
+		other_confid.append(teamConf_map_seasons[season][otid])
 	all_df['this_ConfId'] = pd.Series(this_confid, index=all_df.index)
 	all_df['other_ConfId'] = pd.Series(other_confid, index=all_df.index)
-	all_df.to_pickle(os.path.join(comp_team_dir, 'all.df'))
+	all_df.to_pickle(os.path.join(default.comp_team_dir, 'all.df'))
 
 
 def concatenate_team_DataFrames(data_frames=[]):
 	"""
 	"""
 	if len(data_frames) == 0:
-		comp_team_dir = os.path.join('data', 'compiled_team_data')
-		teams = load_json('all.json', fdir=comp_team_dir)
+		teams = load_json('all.json', fdir=default.comp_team_dir)
 		for tid, team in teams.iteritems():
 			fname = str(tid) + '_DataFrame.df'
-			data_frames.append(pd.read_pickle(os.path.join(comp_team_dir, fname)))
+			data_frames.append(pd.read_pickle(os.path.join(default.comp_team_dir, fname)))
 	all_df = pd.concat(data_frames)
 	return all_df
 
