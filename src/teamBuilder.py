@@ -7,22 +7,28 @@ import csv
 import datetime
 from dateutil import parser
 import src.default_parameters as default
+from src.eloCruncher import append_elos_to_dataFrame
 
 
 def build_all_from_scratch(refresh_data=True, years='all'):
-	print "Compiling teams .."
+	print "Compiling teams ..."
 	compile_and_save_teams(years=years, refresh_data=refresh_data)
+	compile_fields()
+	print "Indexing games ..."
 	index_game_folders()
 	build_teamgame_index()
-	compile_fields()
 	print "Building team info and data ..."
 	build_team_ids()
 	build_team_names()
 	build_team_DataFrames()
 	save_all_df_cols()
 	add_elo_conf_to_all()
+	print "Adding archived data ..."
 	add_archived_data()
+	print "Building team schedules ..."
 	build_team_schedules()
+	print "Appending elos to all data ..."
+	append_elos_to_dataFrame()
 
 
 def index_game_folders():
