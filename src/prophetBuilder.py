@@ -55,73 +55,6 @@ class Params:
 		return [attr for attr in dir(self) if not attr.startswith("__")]
 
 
-class Game:
-	def __init__(self, this_inp_data, other_inp_data, n_prev, this_inp_fields,
-		other_inp_fields, out_fields, avg_inp_callback, tar_data=None, **kwargs):
-		"""
-		Class holding information for game to be predicted
-		inp_data:			all input data, converted to input form according to the #
-							of games prior used for prediction and the input fields
-		n_prev:				# of games prior used for prediction
-		inp_fields:			fields of input data used for prediction
-		out_fields: 		fields of output data being predicted
-		avg_inp_callback:	function used to average input games
-		tar_data:			target data to predict (None if game has not occurred)
-		kwargs:				used for avg_inp_callback
-		"""
-		self.n_prev = n_prev
-		self.this_inp_fields = this_inp_fields
-		self.other_inp_fields = other_inp_fields
-		self.out_fields = out_fields
-		self.this_inp_data = self.filter_inp(this_inp_data, this_inp_fields)
-		self.other_inp_data = self.filter_inp(other_inp_data, other_inp_fields)
-		if self.this_inp_data.shape[0] == 0 or self.other_inp_data.shape[0] == 0:
-			return
-		self.avg_inp_f = avg_inp_callback
-		self.avg_inp_kwargs = kwargs
-		# Get target data if exists
-		if tar_data is not None:
-			self.id = tar_data['Id']
-			self.tar_data = tar_data[out_fields]
-			self.date = tar_data['DateUtc']
-			self.tids = tar_data[['this_TeamId', 'other_TeamId']]
-		else:
-			self.id = None
-			self.tar_data = None
-			self.date = None
-			self.tids = None
-		# Average inputs (set to tar_data option for autoencoder)
-		if self.n_prev > -1:
-			self.inp_data = self.all_inp()
-		else:
-			self.inp_data = self.tar_data
-
-	def filter_inp(self, inp_data, inp_fields):
-		"""
-		Return up to the previous 'n_prev' valid games. Valid games are those
-		with no NaN values in input fields. Assume the previous games are given
-		such that their dates are sorted in ascending order and the number of 
-		previous games is not 0.
-		"""
-		inp_data = inp_data.replace('-', np.nan)
-		inp_data_np = np.asarray(inp_data[inp_fields])
-		inp_data_np	= inp_data_np[~np.isnan(inp_data_np).any(axis=1)]
-		if self.n_prev > 0:
-			return inp_data_np[0:min(inp_data_np.shape[0], self.n_prev), :]
-		else:
-			return inp_data_np
-
-	def all_inp(self):
-		try:
-			return np.hstack([self.avg_inp(use_this=True), self.avg_inp(use_this=False)])
-		except:
-			import pdb; pdb.set_trace()
-
-	def avg_inp(self, use_this=True):
-		data = self.this_inp_data if use_this else self.other_inp_data
-		return self.avg_inp_f(data, **self.avg_inp_kwargs)
-
-
 def build_dataset(prm):
 	"""
 	prm:	paramters file
@@ -136,8 +69,8 @@ def build_dataset(prm):
 	# Keyword args for data averaging
 	if prm.inp_avg is np.mean:
 		kwargs = dict([('axis',0)])
-	elif prm.inp_avg is elo_mean:
-		kwargs = dict([('fields',this_inp_fields)])
+	elif prm.inp_avg is util.elo_mean:
+		kwargs = dict([('fields',inp_fields)])
 	# Extract game training data
 	games = []
 	teams_dict = dict([(t.tid, t) for t in teams])
@@ -236,57 +169,6 @@ def train_net_from_scratch(prm, part_data=None):
 	net = setup_network(part_data['train'], prm)
 	net, error = train_network(net, part_data, prm)
 	return net, part_data, error
-
-
-def build_data(prm):
-	"""
-	Read from compiled dataFrame and builds up a list of games which
-	occurred after min_date. Format data according to the I/O file
-	name provided. Games are used for prediction/training.
-	"""
-	# Read I/O fields
-	io_fields = util.load_json(prm.io_name, fdir=prm.io_dir)
-	inp_fields = io_fields['inputs']
-	out_fields = io_fields['outputs']
-	# Decide keyword argument to use
-	if prm.inp_avg is np.mean:
-		kwargs = dict([('axis',0)])
-	elif prm.inp_avg is elo_mean:
-		kwargs = dict([('fields',inp_fields)])
-	# Read data and seperate by teams
-	all_data = pd.read_pickle(os.path.join(default.comp_team_dir, 'all.df'))
-	data_by_team = partition_data_to_teams(all_data)
-	# Build sets of inputs and target outputs for all possible games
-	games = []
-	for tid, tgames in data_by_team.iteritems():
-		print "{0:g},".format(tid), 
-		# all previous games are potential inputs
-		for _, game in tgames.iterrows():
-			# ensure game is after min_date, score field isn't blank,
-			# and opponent is in history
-			is_recent = game['DateUtc'] >= prm.min_date
-			out_data = game[out_fields]
-			has_output = not any(out_data == '-') and all(pd.notnull(out_data))
-			opp_avail = game['other_TeamId'] in data_by_team
-			if not (is_recent and has_output and opp_avail):
-				continue
-			# get previous games played by both teams
-			other_all_games = data_by_team[game['other_TeamId']]
-			if prm.n_prev_games != 0:
-				this_prev_games = tgames[game['DateUtc'] > tgames['DateUtc']]
-				other_prev_games = other_all_games[game['DateUtc'] > other_all_games['DateUtc']]
-			else:
-				this_prev_games = tgames[game['DateUtc'] == tgames['DateUtc']]
-				other_prev_games = other_all_games[game['DateUtc'] == other_all_games['DateUtc']]
-			if this_prev_games.shape[0] <= 0 or other_prev_games.shape[0] <= 0:
-				continue
-			# build game class instance and append
-			new_game = Game(this_prev_games, other_prev_games, prm.n_prev_games,
-				inp_fields, inp_fields, out_fields, prm.inp_avg, tar_data=game, **kwargs)
-			if new_game.this_inp_data.shape[0] > 0 and new_game.other_inp_data.shape[0] > 0:
-				games.append(new_game)
-	print '\nDone.\n'
-	return games
 
 
 def setup_network(train_data, prm):
