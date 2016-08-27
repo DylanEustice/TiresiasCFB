@@ -131,6 +131,21 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=ran
 	do_print=True, elo_type="winloss", season_quartile=range(4)):
 	"""
 	"""
+	# Get type
+	is_winloss = elo_type == "winloss"
+	is_offdef = elo_type == "offdef" or elo_type == "poffdef" or elo_type == "roffdef"
+	is_conf = elo_type == "conf"
+	assert is_winloss or is_offdef, "elo_type must be  'winloss' or '(p/r)offdef'"
+	# Get correct game field
+	if elo_type == "offdef":
+		compare_avg = default.avg_score
+		MoV_field = 3
+	elif elo_type == "poffdef":
+		compare_avg = default.avg_passing
+		MoV_field = 7
+	elif elo_type == "roffdef":
+		compare_avg = default.avg_rushing
+		MoV_field = 9
 	pr_result = [] # (Pr_win, correct)
 	elo_diff = []
 	ixSeason = 0
@@ -143,11 +158,11 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=ran
 			# Get team's and their information
 			gid = game[0,0]
 			tids = [tid for tid in game[1,:]]
-			if elo_type == "winloss" or elo_type == "offdef":
+			if is_winloss or is_offdef:
 				ixGames = [gid_map[tid][ixSeason].index(gid) for tid in tids]
 				game_quartials = [min(int(ix/3), 3) for ix in ixGames]
 				elos = [elo_dict[tid][ixSeason][ix] for tid,ix in zip(tids, ixGames)]
-			elif elo_type=="conf":
+			elif is_conf:
 				cids = [cid for cid in game[5,:]]
 				if cids[0] == cids[1]:
 					continue
@@ -161,19 +176,19 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=ran
 			if not any([q in season_quartile for q in game_quartials]):
 				continue
 			# Determine win probabilities and winner
-			if elo_type == "winloss" or elo_type=="conf":
+			if is_winloss or is_conf:
 				Pr_win = max(elo_game_probs(elos))
 				correct = np.argmax(elos) == np.argmax(game[3,:])
 				pr_result.append((Pr_win, correct))
 				elo_diff.append(abs(elos[0]-elos[1]))
-			elif elo_type == "offdef":
+			elif is_offdef:
 				# Do for each offense-defense matchup seperately
 				for j in range(2):
 					offdef_elos = [elos[j][0], elos[1-j][1]]
 					Pr_win = max(elo_game_probs(offdef_elos))
 					ixMax_elo = np.argmax(offdef_elos)
-					correct = ((ixMax_elo==1 and game[3,j] < default.avg_score) or
-							   (ixMax_elo==0 and game[3,j] >= default.avg_score))
+					correct = ((ixMax_elo==1 and game[MoV_field,j] < compare_avg) or
+							   (ixMax_elo==0 and game[MoV_field,j] >= compare_avg))
 					pr_result.append((Pr_win, correct))
 					elo_diff.append(abs(offdef_elos[0]-offdef_elos[1]))
 	if do_print:
@@ -256,7 +271,8 @@ def rating_adjuster(Ri, params, elo_diff, MoV, max_MoV_mult=1e3):
 	"""
 	MoV_mult = 1. / np.dot(params[:3], [1, elo_diff, np.sign(elo_diff)*elo_diff**2])
 	MoV_adj = np.sign(MoV) * np.log(np.abs(MoV) + 1)
-	return Ri + params[3] * MoV_adj * MoV_mult
+	new_Ri = Ri + params[3] * MoV_adj * MoV_mult
+	return new_Ri
 
 
 def append_elos_to_dataFrame():
@@ -364,6 +380,7 @@ def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
 	is_winloss = elo_type == "winloss"
 	is_offdef = elo_type == "offdef" or elo_type == "poffdef" or elo_type == "roffdef"
 	assert is_winloss or is_offdef, "elo_type must be  'winloss' or '(p/r)offdef'"
+	# Get correct game field
 	if elo_type == "offdef":
 		compare_avg = default.avg_score
 		MoV_field = 3
@@ -530,7 +547,8 @@ def build_games(all_data=None):
 		game = data[:,data[0,:]==gid]
 		assert(game.shape[1] == 2)
 		assert(game[1,:1] == game[2,1] and game[1,1] == game[2,0])
-		games.append(game)
+		if not np.any([np.isnan(val) for val in game.ravel()]):
+			games.append(game)
 	return games, dates_diff
 
 
