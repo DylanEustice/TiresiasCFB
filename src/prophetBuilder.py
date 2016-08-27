@@ -37,6 +37,7 @@ class Params:
 		self.norm_func = norm_func
 		self.date_diff = date_diff
 		self.home_only = home_only
+		self.kwargs = {}
 
 	@classmethod
 	def load(prms, fname, fdir=PRM_DIR):
@@ -125,25 +126,28 @@ class Game:
 		return self.avg_inp_f(data, **self.avg_inp_kwargs)
 
 
-def build_dataset(prm, year=2015):
+def build_dataset(prm):
 	"""
 	prm:	paramters file
-	year:	current year (for conferences)
 	"""
 	# Load data
 	all_data = load_all_dataFrame()
 	teams = build_all_teams(all_data=all_data)
 	# Read I/O fields
 	io_fields = load_json(prm.io_name, fdir=prm.io_dir)
-	this_inp_fields = io_fields['inputs']
-	other_inp_fields = flip_this_other(this_inp_fields)
+	inp_fields = io_fields['inputs']
 	tar_fields = io_fields['outputs']
+	# Keyword args for data averaging
+	if prm.inp_avg is np.mean:
+		kwargs = dict([('axis',0)])
+	elif prm.inp_avg is elo_mean:
+		kwargs = dict([('fields',this_inp_fields)])
 	# Extract game training data
 	games = []
 	teams_dict = dict([(t.tid, t) for t in teams])
 	for t in teams:
-		games.extend(t.get_training_games(prm, teams_dict, this_inp_fields, 
-			other_inp_fields, tar_fields))
+		print t.tid
+		games.extend(t.get_training_data(prm, teams_dict, inp_fields, tar_fields, **kwargs))
 	# Build dataset
 	full_dataset = {}
 	full_dataset['raw_inp'] = np.vstack([g['inp'] for g in games])
