@@ -6,13 +6,13 @@ from src.util import load_json, dump_json
 
 EXCLUDE_CONCAT_FIELDS = ['Id', 'DateUtc', 'Season', 'is_home']
 
-def load_and_save_archived_data(years=range(2005,2014)):
+def load_and_save_archived_data(years=range(2005,2013)):
 	all_data = load_all_archived_data(years=years)
 	save_dir = os.path.join('data', 'compiled_team_data')
 	all_data.to_pickle(os.path.join(save_dir, 'archived.df'))
 	return all_data
 
-def load_all_archived_data(years=range(2005,2014)):
+def load_all_archived_data(years=range(2005,2013)):
 	"""
 	Load data for past seasons. Comes from different source.
 	"""
