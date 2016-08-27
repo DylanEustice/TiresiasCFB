@@ -1,9 +1,10 @@
 import os
 
-schedule_columns = [
-	'Id', 'this_TeamId', 'other_TeamId', 'DateUtc', 'Season',
-	'Week', 'Spread', 'OverUnder', 'is_home'
-]
+schedule_columns = ['Id', 'this_TeamId', 'other_TeamId', 'DateUtc', 'Season',
+					'Week', 'Spread', 'OverUnder', 'is_home']
+
+all_elo_fields = ['this_wl_elo', 'this_cf_elo', 'this_off_elo', 'this_def_elo', 
+				  'other_wl_elo', 'other_cf_elo', 'other_off_elo', 'other_def_elo']
 
 season_day_sep = 100
 this_year = 2016
