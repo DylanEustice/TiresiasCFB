@@ -62,7 +62,16 @@ def load_all_dataFrame():
 	all_data = all_data[all_data['other_conferenceId'] != '-1']
 	return all_data
 
-def add_archived_data(arch_years=range(2005,2014)):
+
+def load_schedule():
+	"""
+	Load future games
+	"""
+	schedule = pd.read_pickle(os.path.join(COMP_TEAM_DATA, 'schedule.df'))
+	return schedule
+
+
+def add_archived_data(arch_years=range(2005,2013)):
 	"""
 	"""
 	# Load data
@@ -107,6 +116,33 @@ def copy_dir(src, dst):
 			shutil.copy(src, dst)
 		else:
 			raise Exception()
+
+
+def extract_lines_from_schedule():
+	schedule = load_schedule()
+	schedule = schedule[schedule['is_home']]
+	ixHasSpread = np.logical_not(np.isnan(schedule['Spread'].values))
+	ixHasOverUnder = np.logical_not(np.isnan(schedule['OverUnder'].values))
+	ixUse = np.logical_or(ixHasSpread, ixHasOverUnder)
+	spreads = schedule['Spread'].values[ixUse]
+	overUnder = schedule['OverUnder'].values[ixUse]
+	gids = schedule['Id'].values[ixUse]
+	try:
+		lines = load_json('lines.json', fdir=COMP_TEAM_DATA)
+	except IOError:
+		lines = {}
+	for i, gid in enumerate(gids):
+		if gid not in lines:
+			lines[gid] = {}
+			lines[gid]['Spread'] = spreads[i]
+			lines[gid]['OverUnder'] = overUnder[i]
+		else:
+			# Overwrite if available
+			if not np.isnan(spreads[i]):
+				lines[gid]['Spread'] = spreads[i]
+			if not np.isnan(overUnder[i]):
+				lines[gid]['OverUnder'] = overUnder[i]
+	dump_json(lines, 'lines.json', fdir=COMP_TEAM_DATA)
 
 
 def grab_scraper_data(src=os.path.join('..','BarrelRollCFBData','data'),
