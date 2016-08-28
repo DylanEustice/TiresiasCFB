@@ -9,45 +9,81 @@ import os
 import src.default_parameters as default
 
 
-def train_and_save_all_elos(nPop=10, iters=50, **kwargs):
+def train_and_save_all_elos(nPop=10, iters=10, train_type='Optimal', **kwargs):
 	"""
 	"""
-	games, dates_diff = build_games()
-	all_data = load_all_dataFrame()
+	assert train_type == 'Optimal' or train_type == 'Ranking'
 
-	# winloss
-	pop_wl, best_fit_wl = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=200,
-		iters=50, elo_type="winloss", **kwargs)
+	games, dates_diff = build_games()
+	all_data = util.load_all_dataFrame()
+
+	pop_and_fit = {}
+
+	if train_type == 'Optimal':
+		static_fields = None
+	elif train_type == 'Ranking':
+		static_fields = [False, False, False, False, True, False]
+
+	do_ranking = train_type == 'Ranking'
+
+	print "Winloss..."
+	pop_wl, best_fit_wl = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=nPop,
+		iters=iters, elo_type="winloss", static_fields=static_fields, do_ranking=do_ranking, 
+		**kwargs)
 	wl_elos, teamgid_map = run_elos(all_data, games=games, dates_diff=dates_diff, 
 			elo_params=pop_wl[0,:], elo_type="winloss")
+	np.savetxt(os.path.join(default.elo_dir, train_type+'_Winloss_Params.txt'), pop_wl[0,:])
+	pop_and_fit['wl'] = [pop_wl, best_fit_wl]
 
-	pop_od, best_fit_od = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=200,
-		iters=50, elo_type="offdef", **kwargs)
+	print "Offense/defense..."
+	pop_od, best_fit_od = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=nPop,
+		iters=iters, elo_type="offdef", static_fields=static_fields, do_ranking=do_ranking, 
+		**kwargs)
 	od_elos, teamgid_map = run_elos(all_data, games=games, dates_diff=dates_diff, 
 			elo_params=pop_od[0,:], elo_type="offdef")
+	np.savetxt(os.path.join(default.elo_dir, train_type+'_Offdef_Params.txt'), pop_od[0,:])
+	pop_and_fit['od'] = [pop_od, best_fit_od]
 
-	pop_cf, best_fit_cf = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=200,
-		iters=50, elo_type="conf", teamgid_map=teamgid_map, team_elos=wl_elos, **kwargs)
+	print "Conference..."
+	pop_cf, best_fit_cf = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=nPop,
+		iters=iters, elo_type="conf", teamgid_map=teamgid_map, team_elos=wl_elos,
+		static_fields=static_fields, do_ranking=do_ranking, **kwargs)
 	cf_elos, confgid_map = run_conference_elos(teamgid_map, wl_elos, games=games,
 		dates_diff=dates_diff, elo_params=pop_cf[0,:])
+	np.savetxt(os.path.join(default.elo_dir, train_type+'_Conf_Params.txt'), pop_cf[0,:])
+	pop_and_fit['cf'] = [pop_cf, best_fit_cf]
 
-	np.savetxt(os.path.join(default.elo_dir, 'Optimal_Winloss_Params.txt'), pop_wl[0,:])
-	np.savetxt(os.path.join(default.elo_dir, 'Optimal_Offdef_Params.txt'), pop_od[0,:])
-	np.savetxt(os.path.join(default.elo_dir, 'Optimal_Conf_Params.txt'), pop_cf[0,:])
+	print "Passing..."
+	pop_pod, best_fit_pod = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=nPop,
+		iters=iters, elo_type="poffdef", static_fields=static_fields, do_ranking=do_ranking, 
+		**kwargs)
+	pod_elos, teamgid_map = run_elos(all_data, games=games, dates_diff=dates_diff, 
+			elo_params=pop_pod[0,:], elo_type="poffdef")
+	np.savetxt(os.path.join(default.elo_dir, train_type+'_PassYd_Params.txt'), pop_pod[0,:])
+	pop_and_fit['pod'] = [pop_pod, best_fit_pod]
 
-	return pop_wl, best_fit_wl, pop_od, best_fit_od, pop_cf, best_fit_cf
+	print "Rushing..."
+	pop_rod, best_fit_rod = run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=nPop,
+		iters=iters, elo_type="roffdef", static_fields=static_fields, do_ranking=do_ranking,
+		**kwargs)
+	rod_elos, teamgid_map = run_elos(all_data, games=games, dates_diff=dates_diff, 
+			elo_params=pop_rod[0,:], elo_type="roffdef")
+	np.savetxt(os.path.join(default.elo_dir, train_type+'_RushYd_Params.txt'), pop_rod[0,:])
+	pop_and_fit['rod'] = [pop_rod, best_fit_rod]
+
+	return pop_and_fit
 
 
 def elo_obj_fun_ranges(params, all_data, games, dates_diff, elo_type="winloss",
 	teamgid_map=None, team_elos=None, season_range=range(1,11)):
 	"""
 	"""
-	if elo_type == "winloss" or elo_type == "offdef":
-		elo_dict, gid_map = run_elos(all_data, games=games,
-			dates_diff=dates_diff, elo_type=elo_type, elo_params=params)
-	else:
+	if elo_type == "conf":
 		elo_dict, gid_map = run_conference_elos(teamgid_map, team_elos,
 			games=games, dates_diff=dates_diff, elo_params=params)
+	else:
+		elo_dict, gid_map = run_elos(all_data, games=games,
+			dates_diff=dates_diff, elo_type=elo_type, elo_params=params)
 
 	# By season
 	obj_vals_seas = []
@@ -82,17 +118,17 @@ def elo_obj_fun(params, all_data, games, dates_diff, season_range=range(1,11),
 	if params[3] <= 1e-6:
 		return np.inf
 
-	if elo_type == "winloss" or elo_type == "offdef":
-		elo_dict, teamgid_map = run_elos(all_data, games=games,
-			dates_diff=dates_diff, elo_type=elo_type, elo_params=params)
-		pr_result, elo_diff = assess_elo_confidence(elo_dict, teamgid_map, games,
-			dates_diff,	season_range=season_range, do_print=False, elo_type=elo_type,
-			season_quartile=season_quartile)
-
-	elif elo_type == "conf":
+	if elo_type == "conf":
 		elo_dict, confgid_map = run_conference_elos(teamgid_map, team_elos,
 			games=games, dates_diff=dates_diff, elo_params=params)
 		pr_result, elo_diff = assess_elo_confidence(elo_dict, confgid_map, games,
+			dates_diff,	season_range=season_range, do_print=False, elo_type=elo_type,
+			season_quartile=season_quartile)
+
+	else:
+		elo_dict, teamgid_map = run_elos(all_data, games=games,
+			dates_diff=dates_diff, elo_type=elo_type, elo_params=params)
+		pr_result, elo_diff = assess_elo_confidence(elo_dict, teamgid_map, games,
 			dates_diff,	season_range=season_range, do_print=False, elo_type=elo_type,
 			season_quartile=season_quartile)
 
@@ -101,7 +137,7 @@ def elo_obj_fun(params, all_data, games, dates_diff, season_range=range(1,11),
 
 def run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=10, iters=10, kill_rate=0.5,
 	evolve_rng=0.5,	season_range=range(1,11), elo_type="winloss", teamgid_map=None,
-	team_elos=None, static_fields=None, init_params=None):
+	team_elos=None, static_fields=None, init_params=None, do_ranking=True):
 	"""
 	"""
 	all_data = util.load_all_dataFrame()
@@ -114,6 +150,11 @@ def run_evolutionary_elo_search(obj_fun=elo_obj_fun_ranges, nPop=10, iters=10, k
 			init_params = [1., 1e-4, 1e-8, 7.5, 0.5, 1000]
 		elif elo_type == "conf":
 			init_params = [1., 1e-3, 1e-6, 2., 0.5, 1000]
+		elif elo_type == "poffdef" or elo_type == "roffdef":
+			init_params = [1., 1e-4, 1e-8, 1.5, 0.5, 1000]
+
+	if do_ranking:
+		init_params[4] = 1.0
 
 	if static_fields is None:
 		static_fields = [False for _ in range(len(init_params))]
@@ -135,7 +176,7 @@ def assess_elo_confidence(elo_dict, gid_map, games, dates_diff, season_range=ran
 	is_winloss = elo_type == "winloss"
 	is_offdef = elo_type == "offdef" or elo_type == "poffdef" or elo_type == "roffdef"
 	is_conf = elo_type == "conf"
-	assert is_winloss or is_offdef, "elo_type must be  'winloss' or '(p/r)offdef'"
+	assert is_winloss or is_offdef or is_conf, "elo_type must be  'winloss', '(p/r)offdef', or conf"
 	# Get correct game field
 	if elo_type == "offdef":
 		compare_avg = default.avg_score
@@ -278,14 +319,30 @@ def rating_adjuster(Ri, params, elo_diff, MoV, max_MoV_mult=1e3):
 def append_elos_to_dataFrame():
 	"""
 	"""
-	elos, wl_elos, off_elos, def_elos, cf_elos = gen_elo_files()
+	elos = gen_elo_files()
 	all_data = util.load_all_dataFrame()
+	# Get game and team ids
 	gids = [gid for gid in all_data['Id']]
-	tids = [tid for tid in all_data['this_TeamId']]
-	types = ['wl_elo', 'off_elo', 'def_elo', 'cf_elo']
+	this_tids = [tid for tid in all_data['this_TeamId']]
+	other_tids = [tid for tid in all_data['other_TeamId']]
+	types = ['wl_elo', 'off_elo', 'def_elo', 'cf_elo', 'poff_elo', 'pdef_elo', 'roff_elo', 'rdef_elo']
+	tid_elos = dict([(tid,[]) for tid in this_tids])
 	for i, t in enumerate(types):
-		this_elos = [elos[gid][tid][i] for gid, tid in zip(all_data['Id'], all_data['this_TeamId'])]
-		other_elos = [elos[gid][tid][i] for gid, tid in zip(all_data['Id'], all_data['other_TeamId'])]
+		this_elos = []
+		other_elos = []
+		for gid, this_tid, other_tid in zip(gids, this_tids, other_tids):
+			# If game not here, just use teams' previous elo score
+			if gid in elos:
+				this_elo = elos[gid][this_tid][i]
+				other_elo = elos[gid][other_tid][i]
+			else:
+				this_elo = tid_elos[this_tid][-1]
+				other_elo = tid_elos[other_tid][-1]
+			# Save elo
+			tid_elos[this_tid].append(this_elo)
+			tid_elos[other_tid].append(other_elo)
+			this_elos.append(this_elo)
+			other_elos.append(other_elo)
 		all_data['this_' + t] = pd.Series(this_elos, index=all_data.index)
 		all_data['other_' + t] = pd.Series(other_elos, index=all_data.index)
 	# Save
@@ -312,15 +369,11 @@ def gen_elo_files(shift=True):
 	shift: shifts the elo of a game to be after the outcome
 	"""
 	teams = build_all_teams()
-	wl_elos, od_elos, cf_elos, teamgid_map, confgid_map = run_best_elos()
+	wl_elos, od_elos, cf_elos, pod_elos, rod_elos, teamgid_map, confgid_map = run_best_elos()
 	# Seperate offensive and defensive elos
-	off_elos, def_elos = {}, {}
-	for tid in od_elos:
-		off_elos[tid] = []
-		def_elos[tid] = []
-		for ixSeason in range(len(od_elos[tid])):
-			off_elos[tid].append([elo[0] for elo in od_elos[tid][ixSeason]])
-			def_elos[tid].append([elo[1] for elo in od_elos[tid][ixSeason]])
+	off_elos, def_elos = sep_off_def_elos(od_elos)
+	poff_elos, pdef_elos = sep_off_def_elos(pod_elos)
+	roff_elos, rdef_elos = sep_off_def_elos(rod_elos)
 	# Put into dictionary with game/team ID keys
 	teamConf_map = team_to_conf_map(teams)
 	elos = {}
@@ -337,10 +390,24 @@ def gen_elo_files(shift=True):
 				elos[gid][tid] = [wl_elos[tid][ixSeason][ix+s], 
 								  off_elos[tid][ixSeason][ix+s], 
 								  def_elos[tid][ixSeason][ix+s],
-								  cf_elos[cid][ixSeason][ixConf_elos]]
+								  cf_elos[cid][ixSeason][ixConf_elos], 
+								  poff_elos[tid][ixSeason][ix+s], 
+								  pdef_elos[tid][ixSeason][ix+s],
+								  roff_elos[tid][ixSeason][ix+s], 
+								  rdef_elos[tid][ixSeason][ix+s]]
 	# Save files to JSON
 	util.dump_json(elos, "elos.json", fdir=default.elo_dir)
-	return elos, wl_elos, off_elos, def_elos, cf_elos
+	return elos
+
+def sep_off_def_elos(elos):
+	off_elos, def_elos = {}, {}
+	for tid in elos:
+		off_elos[tid] = []
+		def_elos[tid] = []
+		for ixSeason in range(len(elos[tid])):
+			off_elos[tid].append([elo[0] for elo in elos[tid][ixSeason]])
+			def_elos[tid].append([elo[1] for elo in elos[tid][ixSeason]])
+	return off_elos, def_elos
 
 
 def run_best_elos():
@@ -350,6 +417,8 @@ def run_best_elos():
 	wl_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Winloss_Params.txt'))
 	od_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Offdef_Params.txt'))
 	cf_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Conf_Params.txt'))
+	pod_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_PassYd_Params.txt'))
+	rod_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_RushYd_Params.txt'))
 	# Load data
 	all_data = util.load_all_dataFrame()
 	games, dates_diff = build_games()
@@ -361,7 +430,11 @@ def run_best_elos():
 		elo_params=od_params, elo_type="offdef")
 	cf_elos, confgid_map = run_conference_elos(teamgid_map, wl_elos, 
 		games=games, dates_diff=dates_diff, elo_params=cf_params)
-	return wl_elos, od_elos, cf_elos, teamgid_map, confgid_map
+	pod_elos,_ = run_elos(all_data, games=games, dates_diff=dates_diff, 
+		elo_params=pod_params, elo_type="poffdef")
+	rod_elos,_ = run_elos(all_data, games=games, dates_diff=dates_diff, 
+		elo_params=rod_params, elo_type="roffdef")
+	return wl_elos, od_elos, cf_elos, pod_elos, rod_elos, teamgid_map, confgid_map
 
 
 def run_elos(all_data, elo_params=[1., 1e-4, 1e-8, 10., 0.5, 1000], games=[],
