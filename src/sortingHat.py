@@ -6,7 +6,7 @@ import pandas as pd
 import os
 
 
-def rank_teams(date=datetime.datetime.now(), rank_algo='elo_lin_regress'):
+def rank_teams(date=datetime.datetime.now(), rank_algo='elo_lin_regress', elo_fields=None):
 	"""
 	"""
 	season = date.year if date.month >= 9 else date.year-1
@@ -14,7 +14,7 @@ def rank_teams(date=datetime.datetime.now(), rank_algo='elo_lin_regress'):
 	if rank_algo == 'elo_lin_regress':
 		B = np.loadtxt(os.path.join(default.elo_dir, 'Linear_Regression_Beta.txt'))
 		for team in teams:
-			team.elos = team.get_current_elos(next_game_date=date)
+			team.elos = team.get_current_elos(next_game_date=date, elo_fields=elo_fields)
 		team_net_wins = dict([(team.name,0) for team in teams])
 		team_pt_diff = dict([(team.name,0) for team in teams])
 		for team0 in teams:

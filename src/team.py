@@ -36,10 +36,11 @@ class Team:
 	def __eq__(self, id_):
 		return id_ == self.tid or id_ == self.name
 
-	def get_current_elos(self, next_game_date="schedule"):
+	def get_current_elos(self, next_game_date="schedule", elo_fields=None):
 		"""
 		"""
-		elo_fields = default.this_elo_fields
+		if elo_fields is None:
+			elo_fields = default.this_elo_fields
 
 		if next_game_date == "schedule" and self.schedule.shape[0]:
 			next_game_date = self.schedule['DateUtc'].values[0]

@@ -625,7 +625,7 @@ def build_games(all_data=None):
 	return games, dates_diff
 
 
-def build_elo_mats(all_data=None, distinct_home=False, season_range=range(2006,2016)):
+def build_elo_mats(all_data=None, distinct_home=False, season_range=range(2006,2016), elo_fields=None):
 	"""
 	"""
 	if all_data is None:
@@ -636,7 +636,7 @@ def build_elo_mats(all_data=None, distinct_home=False, season_range=range(2006,2
 
 	ixInRange = np.array([season in season_range for season in all_data['Season'].values])
 
-	X_fields = default.all_elo_fields
+	X_fields = default.all_elo_fields if elo_fields is None else elo_fields
 	X = np.matrix(np.vstack([all_data[f].values[ixInRange] for f in X_fields])).T
 
 	y_fields = ['this_Score', 'other_Score']
