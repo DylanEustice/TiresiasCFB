@@ -191,8 +191,7 @@ def linear_regression(X, y):
 	return (X.T * X)**-1 * X.T * y
 
 
-def elo_mean(x, fields, elo_fields=['this_wl_elo','other_wl_elo','this_off_elo',
-	'other_off_elo','this_def_elo','other_def_elo','this_cf_elo','other_cf_elo']):
+def elo_mean(x, fields, elo_fields=default.all_elo_fields):
 	"""
 	Preforms a mean on a data series, but using the last indexed
 	elo value instead of averaging

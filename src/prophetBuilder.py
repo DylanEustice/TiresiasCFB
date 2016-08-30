@@ -86,8 +86,8 @@ def build_dataset(prm):
 	full_dataset['norm_func'] = str(prm.norm_func)
 	full_dataset['games'] = games
 	# Partition dataset and return
-	part_dataset = partition_data(full_dataset, train_pct=prm.train_pct)
-	return part_dataset
+	dataset = partition_data(full_dataset, train_pct=prm.train_pct)
+	return dataset
 
 
 def partition_data(data, train_pct=0.5):
@@ -132,6 +132,7 @@ def build_prms_file(prm_name, io_name, io_dir=default.io_dir, min_games=6,
 		home_only)
 	with open(os.path.join(default.prm_dir, prm_name), 'w') as f:
 		pickle.dump(prms, f)
+	return prms
 
 
 def train_net_from_prms(prm=None, prm_name=None, data_file=None, fdir=default.data_dir):
@@ -143,32 +144,30 @@ def train_net_from_prms(prm=None, prm_name=None, data_file=None, fdir=default.da
 		prm = Params.load(prm_name)
 	if data_file is None:
 		# Build data and train
-		net, part_data, error = train_net_from_scratch(prm)
+		net, dataset, error = train_net_from_scratch(prm)
 		# Save if desired
 		fname = raw_input('Save built data? Enter N or file name (*.pkl): ')
 		if fname != 'N':
 			with open(os.path.join(fdir, fname), 'w') as f:
-				pickle.dump(part_data, f)
+				pickle.dump(dataset, f)
 	else:
 		# Read data and train
 		with open(os.path.join(fdir, data_file), 'r') as f:
-			part_data = pickle.load(f)
-		net, _, error = train_net_from_scratch(prm, part_data=part_data)
-	return net, part_data, error
+			dataset = pickle.load(f)
+		net, _, error = train_net_from_scratch(prm, dataset=dataset)
+	return net, dataset, error
 
 
-def train_net_from_scratch(prm, part_data=None):
+def train_net_from_scratch(prm, dataset=None):
 	"""
 	Setup data, setup network, and train network given inputs
 	"""
-	if part_data is None:
-		# Get partitioned data
-		all_data = setup_train_data(prm)
-		part_data = partition_data(all_data, train_pct=prm.train_pct)
+	if dataset is None:
+		dataset = build_dataset(prm)
 	# Train network
-	net = setup_network(part_data['train'], prm)
-	net, error = train_network(net, part_data, prm)
-	return net, part_data, error
+	net = setup_network(dataset['train'], prm)
+	net, error = train_network(net, dataset, prm)
+	return net, dataset, error
 
 
 def setup_network(train_data, prm):
