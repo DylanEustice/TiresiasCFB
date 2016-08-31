@@ -27,6 +27,7 @@ def build_all_from_scratch(refresh_data=True, years='all'):
 	add_archived_data()
 	print "Building team schedules ..."
 	build_team_schedules()
+	extract_lines_from_schedule()
 	print "Appending elos to all data ..."
 	append_elos_to_dataFrame()
 
@@ -117,7 +118,7 @@ def build_team_schedules(years='all'):
 	teamgame_index = load_json(os.path.join('data', 'teamgame_index.json'))
 	all_schedule_gids = []
 	if years == 'all':
-		years =[2016]
+		years = [2016]
 	for year in years:
 		try:
 			yeardir = os.path.join('data', str(year))
@@ -169,6 +170,33 @@ def build_team_schedules(years='all'):
 	return schedule
 
 
+def extract_lines_from_schedule():
+	schedule = load_schedule()
+	schedule = schedule[schedule['is_home']]
+	ixHasSpread = np.logical_not(np.isnan(schedule['Spread'].values))
+	ixHasOverUnder = np.logical_not(np.isnan(schedule['OverUnder'].values))
+	ixUse = np.logical_or(ixHasSpread, ixHasOverUnder)
+	spreads = schedule['Spread'].values[ixUse]
+	overUnder = schedule['OverUnder'].values[ixUse]
+	gids = schedule['Id'].values[ixUse]
+	try:
+		lines = load_json('lines.json', fdir=default.comp_team_dir)
+	except IOError:
+		lines = {}
+	for i, gid in enumerate(gids):
+		if gid not in lines:
+			lines[gid] = {}
+			lines[gid]['Spread'] = spreads[i]
+			lines[gid]['OverUnder'] = overUnder[i]
+		else:
+			# Overwrite if available
+			if not np.isnan(spreads[i]):
+				lines[gid]['Spread'] = spreads[i]
+			if not np.isnan(overUnder[i]):
+				lines[gid]['OverUnder'] = overUnder[i]
+	dump_json(lines, 'lines.json', fdir=default.comp_team_dir)
+
+
 def compile_teams(years='all', refresh_data=False):
 	"""
 	Compile teams from inputted year range into dictionaries.
@@ -181,8 +209,9 @@ def compile_teams(years='all', refresh_data=False):
 	game_index = load_json(os.path.join('data', 'game_index.json'))
 	teamgame_index = load_json(os.path.join('data', 'teamgame_index.json'))
 	if years == 'all':
-		years = range(2000, default.this_year)
+		years = range(2000, default.this_year+1)
 	for year in years:
+		print year
 		try:
 			yeardir = os.path.join('data', str(year))
 		except IOError:

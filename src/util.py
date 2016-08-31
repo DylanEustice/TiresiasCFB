@@ -74,33 +74,6 @@ def copy_dir(src, dst):
 			raise Exception()
 
 
-def extract_lines_from_schedule():
-	schedule = load_schedule()
-	schedule = schedule[schedule['is_home']]
-	ixHasSpread = np.logical_not(np.isnan(schedule['Spread'].values))
-	ixHasOverUnder = np.logical_not(np.isnan(schedule['OverUnder'].values))
-	ixUse = np.logical_or(ixHasSpread, ixHasOverUnder)
-	spreads = schedule['Spread'].values[ixUse]
-	overUnder = schedule['OverUnder'].values[ixUse]
-	gids = schedule['Id'].values[ixUse]
-	try:
-		lines = load_json('lines.json', fdir=default.comp_team_dir)
-	except IOError:
-		lines = {}
-	for i, gid in enumerate(gids):
-		if gid not in lines:
-			lines[gid] = {}
-			lines[gid]['Spread'] = spreads[i]
-			lines[gid]['OverUnder'] = overUnder[i]
-		else:
-			# Overwrite if available
-			if not np.isnan(spreads[i]):
-				lines[gid]['Spread'] = spreads[i]
-			if not np.isnan(overUnder[i]):
-				lines[gid]['OverUnder'] = overUnder[i]
-	dump_json(lines, 'lines.json', fdir=default.comp_team_dir)
-
-
 def grab_scraper_data(src=os.path.join('..','BarrelRollCFBData','data'),
 					  dst=os.path.join('data')):
 	"""
