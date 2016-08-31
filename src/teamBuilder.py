@@ -478,8 +478,11 @@ def team_is_home(team_id, gameinfo):
 
 
 def load_team_json(team_id):
-	names = load_json('team_names.json', fdir='data')
-	name = names[str(team_id)]
+	if isinstance(team_id, str):
+		name = team_id
+	else:
+		names = load_json('team_names.json', fdir='data')
+		name = names[str(team_id)]
 	team = load_json(name+'.json', fdir=os.path.join('data', 'compiled_team_data'))
 	return team
 
