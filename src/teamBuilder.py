@@ -8,6 +8,7 @@ import datetime
 from dateutil import parser
 import src.default_parameters as default
 from src.eloCruncher import append_elos_to_dataFrame
+import numpy as np
 
 
 def build_all_from_scratch(refresh_data=True, years='all'):
@@ -105,45 +106,43 @@ def compile_and_save_teams(years='all', refresh_data=False):
 	teams = compile_teams(years=years, refresh_data=refresh_data)
 	dump_json(teams, 'all.json', fdir=default.comp_team_dir, indent=4)
 	for tid, team in teams.iteritems():
-		dump_json(team, team['school'] + '.json', fdir=fdir, indent=4)
+		dump_json(team, team['school'] + '.json', fdir=default.comp_team_dir, indent=4)
 
 
-def build_team_schedules(years='all'):
+def build_team_schedules(do_save=True, year=None):
 	"""
 	Make a data frame with only future games
 	"""
 	teams = {}
-	today = datetime.datetime.now()
 	game_index = load_json(os.path.join('data', 'game_index.json'))
 	teamgame_index = load_json(os.path.join('data', 'teamgame_index.json'))
 	all_schedule_gids = []
-	if years == 'all':
-		years = [2016]
-	for year in years:
-		try:
-			yeardir = os.path.join('data', str(year))
-		except IOError:
-			continue
-		# Add new teams' year
-		for root, dirs, files in os.walk(os.path.join(yeardir, 'teams')):
-			for f in files:
-				newteam = load_json(os.path.join(root, f))
-				try:
-					setup_team_year(year, teams, newteam)
-				except KeyError:
-					init_team(teams, newteam)
-					setup_team_year(year, teams, newteam)
-		# Add all games to teams
-		for teamid in teams:
-			for gameid in teamgame_index[str(teamid)]:
-				game_path = game_index[gameid]
-				game_year = re.search(r'data\W+(?P<year>\d{4})\W+gameinfo', game_path).group('year')
-				if game_year == str(year):
-					teams[teamid]['games'][str(year)][gameid] = {}
-					gameinfo = load_json('gameinfo_'+gameid+'.json', fdir=game_path)
-					date = parser.parse(gameinfo['DateUtc'])
-					if date >= today:
-						teams[teamid]['games'][str(year)][gameid]['gameinfo'] = gameinfo
+	if year is None:
+		year = default.this_year
+	try:
+		yeardir = os.path.join('data', str(year))
+	except IOError:
+		continue
+	# Add new teams' year
+	for root, dirs, files in os.walk(os.path.join(yeardir, 'teams')):
+		for f in files:
+			newteam = load_json(os.path.join(root, f))
+			try:
+				setup_team_year(year, teams, newteam)
+			except KeyError:
+				init_team(teams, newteam)
+				setup_team_year(year, teams, newteam)
+	# Add all games to teams
+	for teamid in teams:
+		for gameid in teamgame_index[str(teamid)]:
+			game_path = game_index[gameid]
+			game_year = re.search(r'data\W+(?P<year>\d{4})\W+gameinfo', game_path).group('year')
+			if game_year == str(year):
+				teams[teamid]['games'][str(year)][gameid] = {}
+				gameinfo = load_json('gameinfo_'+gameid+'.json', fdir=game_path)
+				date = parser.parse(gameinfo['DateUtc'])
+				assert int(gameinfo['Season']) == default.this_year:
+				teams[teamid]['games'][str(year)][gameid]['gameinfo'] = gameinfo
 	schedule = pd.DataFrame(columns=default.schedule_columns)
 	for tid, team in teams.iteritems():
 		for year in team['games'].keys():
@@ -161,12 +160,13 @@ def build_team_schedules(years='all'):
 					overunder = np.nan
 				# Assumes id, this_tid, other_tid, date, season, week, spread, overunder, is_home
 				row = [
-					gid, int(tid), int(info['AwayTeamId']) if home else int(info['HomeTeamId']),
+					gid, int(tid), int(info['AwayTeamId']) if is_home else int(info['HomeTeamId']),
 					parser.parse(info['DateUtc']), int(info['Season']), int(info['Week']), 
 					spread, overunder, is_home
 				]
 				schedule = schedule.append(pd.Series(row, index=default.schedule_columns), ignore_index=True)
-	schedule.to_pickle(os.path.join(default.comp_team_dir, 'schedule.df'))
+	if do_save:
+		schedule.to_pickle(os.path.join(default.comp_team_dir, 'schedule.df'))
 	return schedule
 
 
