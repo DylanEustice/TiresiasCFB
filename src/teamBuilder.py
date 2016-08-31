@@ -102,8 +102,7 @@ def compile_and_save_teams(years='all', refresh_data=False):
 	Compile all teams into dictionaries and save as json
 	"""
 	teams = compile_teams(years=years, refresh_data=refresh_data)
-	fdir = os.path.join('data', 'compiled_team_data')
-	dump_json(teams, 'all.json', fdir=fdir, indent=4)
+	dump_json(teams, 'all.json', fdir=default.comp_team_dir, indent=4)
 	for tid, team in teams.iteritems():
 		dump_json(team, team['school'] + '.json', fdir=fdir, indent=4)
 
@@ -241,7 +240,7 @@ def compile_fields():
 	"""
 	box_keys = []
 	game_keys = []
-	teams = load_json('all.json', fdir=os.path.join('data', 'compiled_team_data'))
+	teams = load_json('all.json', fdir=default.comp_team_dir)
 	for tid, team in teams.iteritems():
 		for year, games in team['games'].iteritems():
 			for gid, game in games.iteritems():
@@ -281,7 +280,7 @@ def build_team_ids():
 	"""
 	Map school name to id #
 	"""
-	teams = load_json('all.json', fdir=os.path.join('data', 'compiled_team_data'))
+	teams = load_json('all.json', fdir=default.comp_team_dir)
 	teamid_dict = {}
 	for tid, team in teams.iteritems():
 		teamid_dict[team['school']] = tid
@@ -292,7 +291,7 @@ def build_team_names():
 	"""
 	Map school id # to name
 	"""
-	teams = load_json('all.json', fdir=os.path.join('data', 'compiled_team_data'))
+	teams = load_json('all.json', fdir=default.comp_team_dir)
 	teamid_dict = {}
 	for tid, team in teams.iteritems():
 		teamid_dict[tid] = team['school']
@@ -483,14 +482,14 @@ def load_team_json(team_id):
 	else:
 		names = load_json('team_names.json', fdir='data')
 		name = names[str(team_id)]
-	team = load_json(name+'.json', fdir=os.path.join('data', 'compiled_team_data'))
+	team = load_json(name+'.json', fdir=default.comp_team_dir)
 	return team
 
 
 def save_all_df_cols():
-	all_data = pd.read_pickle(os.path.join('data', 'compiled_team_data', 'all.df'))
+	all_data = pd.read_pickle(os.path.join(default.comp_team_dir, 'all.df'))
 	cols = all_data.columns
 	inout = {}
 	inout['inputs'] = [c for c in cols]
 	inout['outputs'] = [c for c in cols]
-	dump_json(inout, 'all_df_fields.json', fdir=os.path.join('data', 'inout_fields'))
+	dump_json(inout, 'all_df_fields.json', fdir=default.io_dir)
