@@ -1,6 +1,6 @@
 import os
 import re
-from src.util import load_json, dump_json, grab_scraper_data, debug_assert, load_all_dataFrame
+from src.util import load_json, dump_json, grab_scraper_data, load_all_dataFrame
 from src.team import build_all_teams
 import pandas as pd
 import csv
@@ -471,8 +471,8 @@ def team_is_home(team_id, gameinfo):
 	"""
 	Check team id against home team in gameinfo structure
 	"""
-	debug_assert(int(team_id) == int(gameinfo['HomeTeamId']) or
-				 int(team_id) == int(gameinfo['AwayTeamId']))
+	assert (int(team_id) == int(gameinfo['HomeTeamId']) or
+		    int(team_id) == int(gameinfo['AwayTeamId']))
 	return int(team_id) == int(gameinfo['HomeTeamId'])
 
 
