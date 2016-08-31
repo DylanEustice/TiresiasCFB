@@ -234,3 +234,14 @@ def flip_this_other(fields):
 		else:
 			out_fields[i] = f
 	return out_fields
+
+
+
+def get_pct_correct(y_true, y_pred):
+	"""
+	Assumes these are M x 2 score arrays
+	"""
+	y_true = np.array(y_true)
+	y_pred = np.array(y_pred)
+	correct = (y_true[:,0] > y_true[:,1]) == (y_pred[:,0] > y_pred[:,1])
+	return np.mean(correct)
