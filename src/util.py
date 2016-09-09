@@ -48,11 +48,11 @@ def load_all_dataFrame():
 	return all_data
 
 
-def load_schedule():
+def load_schedule(year=default.this_year):
 	"""
 	Load future games
 	"""
-	schedule = pd.read_pickle(os.path.join(default.comp_team_dir, 'schedule.df'))
+	schedule = pd.read_pickle(os.path.join('data', str(year), 'schedule.df'))
 	return schedule
 
 
@@ -82,9 +82,9 @@ def grab_scraper_data(src=os.path.join('..','BarrelRollCFBData','data'),
 	copy_dir(src, dst)
 
 
-def load_team_DataFrame(team_id, path_to_data='.'):
+def load_team_DataFrame(team_id, dir=default.comp_team_dir):
 	fname = str(team_id) + '_DataFrame.df'
-	return pd.read_pickle(os.path.join(path_to_data, 'data', 'compiled_team_data', fname))
+	return pd.read_pickle(os.path.join(path_to_data, fname))
 
 
 def standardize_data(data, std=None, mean=None):
