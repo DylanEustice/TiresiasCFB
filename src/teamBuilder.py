@@ -1,6 +1,6 @@
 import os
 import re
-from src.util import load_json, dump_json, grab_scraper_data, load_all_dataFrame
+from src.util import load_json, dump_json, grab_scraper_data, load_all_dataFrame, load_schedule
 from src.team import build_all_teams
 import pandas as pd
 import csv
@@ -119,10 +119,7 @@ def build_team_schedules(do_save=True, year=None):
 	all_schedule_gids = []
 	if year is None:
 		year = default.this_year
-	try:
-		yeardir = os.path.join('data', str(year))
-	except IOError:
-		continue
+	yeardir = os.path.join('data', str(year))
 	# Add new teams' year
 	for root, dirs, files in os.walk(os.path.join(yeardir, 'teams')):
 		for f in files:
@@ -141,7 +138,7 @@ def build_team_schedules(do_save=True, year=None):
 				teams[teamid]['games'][str(year)][gameid] = {}
 				gameinfo = load_json('gameinfo_'+gameid+'.json', fdir=game_path)
 				date = parser.parse(gameinfo['DateUtc'])
-				assert int(gameinfo['Season']) == default.this_year:
+				assert int(gameinfo['Season']) == default.this_year
 				teams[teamid]['games'][str(year)][gameid]['gameinfo'] = gameinfo
 	schedule = pd.DataFrame(columns=default.schedule_columns)
 	for tid, team in teams.iteritems():
@@ -151,7 +148,7 @@ def build_team_schedules(do_save=True, year=None):
 				is_home = info['HomeTeamId'] == tid
 				try:
 					# set spread to negative if away
-					spread = (1 - 2*is_home) * float(info['Spread'])
+					spread = (1 - 2*(not is_home)) * float(info['Spread'])
 				except:
 					spread = np.nan
 				try:
@@ -166,15 +163,15 @@ def build_team_schedules(do_save=True, year=None):
 				]
 				schedule = schedule.append(pd.Series(row, index=default.schedule_columns), ignore_index=True)
 	if do_save:
-		schedule.to_pickle(os.path.join(default.comp_team_dir, 'schedule.df'))
+		schedule.to_pickle(os.path.join('data', str(year), 'schedule.df'))
 	return schedule
 
 
 def extract_lines_from_schedule():
 	schedule = load_schedule()
 	schedule = schedule[schedule['is_home']]
-	ixHasSpread = np.logical_not(np.isnan(schedule['Spread'].values))
-	ixHasOverUnder = np.logical_not(np.isnan(schedule['OverUnder'].values))
+	ixHasSpread = np.logical_not(np.isnan(schedule['Spread'].values.astype(float)))
+	ixHasOverUnder = np.logical_not(np.isnan(schedule['OverUnder'].values.astype(float)))
 	ixUse = np.logical_or(ixHasSpread, ixHasOverUnder)
 	spreads = schedule['Spread'].values[ixUse]
 	overUnder = schedule['OverUnder'].values[ixUse]
@@ -276,14 +273,17 @@ def compile_fields():
 				# boxscore
 				try:
 					box_keys.extend(game['boxscore']['awayTeam'].keys())
-				except KeyError: pass
+				except (KeyError, TypeError):
+					pass
 				try:
-					game_keys.extend(game['boxscore']['hoemTeam'].keys())
-				except KeyError: pass
+					game_keys.extend(game['boxscore']['homeTeam'].keys())
+				except (KeyError, TypeError):
+					pass
 				# gameinfo
 				try:
 					game_keys.extend(game['gameinfo'].keys())
-				except KeyError: pass
+				except (KeyError, TypeError):
+					pass
 	unique_box_keys = list(set(box_keys))
 	unique_game_keys = list(set(game_keys))
 	# Manual unwanted key removal
@@ -336,7 +336,7 @@ def build_team_DataFrames():
 	for tid, team in teams.iteritems():
 		box_arr = team_boxscore_to_array(team, tid)
 		fname = tid +'_DataFrame.df'
-		box_arr.to_pickle(os.path.join(comp_team_dir, fname))
+		box_arr.to_pickle(os.path.join(default.comp_team_dir, fname))
 		data_frames.append(box_arr)
 	all_df = concatenate_team_DataFrames(data_frames=data_frames)
 	all_df.to_pickle(os.path.join(default.comp_team_dir, 'all.df'))
@@ -347,13 +347,13 @@ def add_elo_conf_to_all():
 	"""
 	all_df = load_all_dataFrame()
 	# Add elo keys
-	add_elo_keys = ['wl_elo', 'off_elo', 'def_elo', 'cf_elo']
+	add_elo_keys = default.all_elo_fields
 	for pre in ['this_','other_']:
 		for key in add_elo_keys:
 			all_df[pre+key] = pd.Series(np.zeros(all_df.shape[0]), index=all_df.index)
 	# Add conference id keys
 	seasons = np.unique(all_df['Season'])
-	teams = build_all_teams(years=seasons, all_data=all_data)
+	teams = build_all_teams(years=seasons, all_data=all_df)
 	# Build team to conference mapping
 	teamConf_map_seasons = {}
 	for season in seasons:
@@ -436,8 +436,10 @@ def team_boxscore_to_array(team, team_id):
 				# load data
 				try:
 					data = game[data_field]
+					if data is None:
+						continue
 				except KeyError:
-					UserWarning("Bad %s field found in game %s" % (data_field, gid))
+					UserWarning("Bad {} field found in game {}".format(data_field, gid))
 					continue
 				# add to array
 				keys = key_fields[i]
@@ -450,14 +452,14 @@ def team_boxscore_to_array(team, team_id):
 						try:
 							tmp_data = data if is_ginfo else data[this_box_field]
 						except KeyError:
-							UserWarning("Bad %s field found in game %s" % (data_field, gid))
+							UserWarning("Bad {} field found in game {}".format(data_field, gid))
 							continue
 					elif re.match("other_", key) is not None:
 						data_key = re.sub("other_", other_repl, key)
 						try:
 							tmp_data = data if is_ginfo else data[other_box_field]
 						except KeyError:
-							UserWarning("Bad %s field found in game %s" % (data_field, gid))
+							UserWarning("Bad {} field found in game {}".format(data_field, gid))
 							continue
 					else:
 						data_key = key
