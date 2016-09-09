@@ -71,7 +71,7 @@ def load_all_archived_data(years=range(2005,2013)):
 	all_data['Yards per Rush'] = (all_data['Rush Yard'] / all_data['Rush Att']).replace(np.nan, 0.)
 	# Is home
 	home_codes = (all_data['Game Code'].values / 1e12).astype(int)
-	all_data['is_home'] = all_data['Team Code'] == home_codes
+	all_data['is_home'] = np.array(all_data['Team Code'] == home_codes).astype(int)
 	# Total turnovers
 	all_data['Turnovers'] = all_data['Pass Int'] + all_data['Fumble Lost']
 	# Other (calc later)
@@ -134,7 +134,7 @@ def map_team_conf_fields(all_data):
 		new_team_ids[i] = new_team_id
 		new_conf_ids[i] = new_conf_id
 	all_data['TeamId'] = pd.Series(new_team_ids, index=all_data.index)
-	all_data['ConfId'] = pd.Series(new_conf_ids, index=all_data.index)
+	all_data['conferenceId'] = pd.Series(new_conf_ids, index=all_data.index)
 	return all_data
 
 def combine_games(all_data):
@@ -202,7 +202,7 @@ def remove_unknown_teams(all_data):
 	is_unknown_team = lambda tid0, tid1: tid0 not in team_id_map_rev or tid1 not in team_id_map_rev
 	is_unknown_conf = lambda cid0, cid1: cid0 not in conf_id_map_rev or cid1 not in conf_id_map_rev
 	zip_tids = zip(all_data['this_TeamId'].values, all_data['other_TeamId'].values)
-	zip_cids = zip(all_data['this_ConfId'].values, all_data['other_ConfId'].values)
+	zip_cids = zip(all_data['this_conferenceId'].values, all_data['other_conferenceId'].values)
 	ixUnknown_team = [is_unknown_team(ttid, otid) for ttid, otid in zip_tids]
 	ixUnknown_conf = [is_unknown_conf(tcid, ocid) for tcid, ocid in zip_cids]
 	ixKeep = np.logical_not(np.logical_or(ixUnknown_team, ixUnknown_conf))
