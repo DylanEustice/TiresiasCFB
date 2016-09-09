@@ -12,13 +12,14 @@ import src.default_parameters as default
 
 
 class Params:
-	def __init__(self, io_name, io_dir, min_games, min_date, trainf, lyr, train_pct, lr,
-		epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func, date_diff,
-		home_only):
+	def __init__(self, io_name, io_dir, min_games, min_date, max_date, trainf, lyr,
+		train_pct, lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg,
+		norm_func, date_diff, home_only):
 		self.io_name = io_name
 		self.io_dir = io_dir
 		self.min_games = min_games
 		self.min_date = min_date
+		self.max_date = max_date
 		self.trainf = trainf
 		self.lyr = lyr
 		self.train_pct = train_pct
@@ -37,7 +38,7 @@ class Params:
 
 	@classmethod
 	def load(prms, fname, fdir=default.prm_dir):
-		this = prms(*[None]*18)
+		this = prms(*[None]*19)
 		with open(os.path.join(fdir, fname),"r") as f:
 			this = pickle.load(f)
 		return this
@@ -175,7 +176,7 @@ def setup_network(train_data, prm):
 	train_data: used to set input and output layer sizes
 	prm:		paramters file
 	"""
-	lyr_rng = zip(train_data['norm_inp'].min(axis=0), train_data['norm_inp'].max(axis=0))
+	lyr_rng = zip([0.]*train_data['norm_inp'].shape[1], [1.]*train_data['norm_inp'].shape[1])
 	net = nl.net.newff(lyr_rng, [prm.hid_lyr, train_data['norm_tar'].shape[1]], prm.lyr)
 	net.trainf = prm.trainf
 	for l in net.layers:
@@ -198,6 +199,8 @@ def train_network(net, data, prm):
 	msef = nl.error.MSE()
 	best_net = copy.deepcopy(net)
 	best_error = float('inf')
+	test_data_acc = dict([('inp', data['test']['norm_inp']), ('tar', data['test']['norm_tar'])])
+	train_data_acc = dict([('inp', data['train']['norm_inp']), ('tar', data['train']['norm_tar'])])
 	for i in range(prm.epochs / prm.update_freq):
 		if net.trainf is not nl.train.train_bfgs:
 			error_tmp = net.train(train['norm_inp'], train['norm_tar'],
@@ -209,9 +212,11 @@ def train_network(net, data, prm):
 		error_test.append(msef(test['norm_tar'], net.sim(test['norm_inp'])))
 		if error_test[-1] < best_error:
 			best_net = copy.deepcopy(net)
-		print "Iters: {} / {}".format(i*prm.update_freq, prm.epochs)
-		print "Train: {}".format(error_train[-1])
-		print " Test: {}".format(error_test[-1])
+		print "Iters    : {} / {}".format(i*prm.update_freq, prm.epochs)
+		print "Train    : {}".format(error_train[-1])
+		print " Test Acc: {}".format(util.get_winner_acc(net, train_data_acc))
+		print " Test    : {}".format(error_test[-1])
+		print " Test Acc: {}".format(util.get_winner_acc(net, test_data_acc))
 	error = {}
 	error['train'] = error_train
 	error['test'] = error_test
