@@ -31,7 +31,10 @@ class Team:
 		self._elo_params['this_pdef_elo'] = self._elo_params['this_poff_elo']
 		self._elo_params['this_roff_elo'] = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_RushYd_Params.txt'))
 		self._elo_params['this_rdef_elo'] = self._elo_params['this_roff_elo']
-		self.elos = self.get_current_elos()
+		if default.all_elo_fields[0] in self.games:
+			self.elos = self.get_current_elos()
+		else:
+			self.elos = None
 
 	def __eq__(self, id_):
 		return id_ == self.tid or id_ == self.name
@@ -62,6 +65,9 @@ class Team:
 
 		return elos
 
+	def set_elos_to_date(self, date, elo_fields=None):
+		self.elos = self.get_current_elos(next_game_date=date, elo_fields=elo_fields)
+
 	def _get_prev_game_ix_before_date(self, date):
 		prev_games = self.games['DateUtc'] < date
 		return np.where(prev_games)[0][-1]
@@ -73,7 +79,6 @@ class Team:
 			init_elo = self._elo_params[f][5]
 			elos[i] = elos[i] + season_regress*(init_elo - elos[i])
 		return elos
-
 
 	def get_game(self, gid):
 		"""
@@ -106,7 +111,9 @@ class Team:
 		min_games_in_season = 8
 		# Get games after minimum date
 		games = []
-		ixValid = np.array(self.games['DateUtc'] > prm.min_date)
+		ixAfterMin = np.array(self.games['DateUtc'] > prm.min_date)
+		ixBeforeMax = np.array(self.games['DateUtc'] < prm.max_date)
+		ixValid = np.logical_and(ixAfterMin, ixBeforeMax)
 		valid_games = self.games[ixValid]
 		for _, g in valid_games.iterrows():
 			if prm.min_games > 0:
@@ -160,7 +167,7 @@ def get_games_in_range(games, curr_date, max_diff):
 	return games[valid_dates]
 
 
-def build_all_teams(years=range(2005,2017), all_data=None):
+def build_all_teams(years=range(2005,default.this_year+1), all_data=None):
 	"""
 	Builds a list of teams (entries are Team class) for all compiled data
 	"""
