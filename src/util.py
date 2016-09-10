@@ -94,13 +94,11 @@ def standardize_data(data, std=None, mean=None):
 	Assumes data is M x N where M is the observations and
 	N is the data type.
 	"""
-	if std is None and mean is None:
-		return np.divide(data - data.mean(axis=0), data.std(axis=0))
-	elif std is not None and mean is not None:
-		return np.divide(data - mean, std)
-	else:
-		UserWarning("Must enter both STD and MEAN, only one entered.")
-		return None
+	if std is None:
+		std = data.std(axis=0)
+	if mean is None:
+		mean = data.mean(axis=0)
+	return np.divide(data - mean, std), std, mean
 
 
 def normalize_data(data, min_=None, max_=None):
@@ -110,13 +108,11 @@ def normalize_data(data, min_=None, max_=None):
 	Assumes data is M x N where M is the observations and
 	N is the data type.
 	"""
-	if min_ is None and max_ is None:
-		return np.divide(data - data.min(axis=0), data.max(axis=0))
-	elif min_ is not None and max_ is not None:
-		return np.divide(data - min_, max_)
-	else:
-		UserWarning("Must enter both STD and MEAN, only one entered.")
-		return None
+	if min_ is None:
+		min_ = data.min(axis=0)
+	if max_ is None:
+		max_ = data.max(axis=0)
+	return np.divide(data - min_, max_), min_, max_
 
 
 def moving_avg(data, n=10):
