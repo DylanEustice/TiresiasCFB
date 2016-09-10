@@ -3,6 +3,7 @@ import numpy as np
 import os
 import datetime
 from src.util import load_json, dump_json
+import src.default_parameters as default
 
 EXCLUDE_CONCAT_FIELDS = ['Id', 'DateUtc', 'Season', 'is_home']
 
@@ -76,10 +77,8 @@ def load_all_archived_data(years=range(2005,2013)):
 	all_data['Turnovers'] = all_data['Pass Int'] + all_data['Fumble Lost']
 	# Other (calc later)
 	all_data['conferenceId'] = 0
-	all_data['wl_elo'] = 0
-	all_data['off_elo'] = 0
-	all_data['def_elo'] = 0
-	all_data['cf_elo'] = 0
+	for field in default.this_elo_fields:
+		all_data[field[5:]] = 0
 	# Rename fields and ids to match new data
 	all_data = rename_fields(all_data)
 	all_data = map_team_conf_fields(all_data)
