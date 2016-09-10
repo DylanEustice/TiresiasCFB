@@ -46,7 +46,8 @@ class Team:
 			elo_fields = default.this_elo_fields
 
 		if next_game_date == "schedule" and self.schedule.shape[0]:
-			next_game_date = self.schedule['DateUtc'].values[0]
+			ixNotPlayed = np.array([int(id_) not in self.games['Id'] for id_ in self.schedule['Id']])
+			next_game_date = self.schedule['DateUtc'].values[ixNotPlayed][0]
 		elif next_game_date == "schedule":
 			elos = [self.games[f].values[-1] for f in elo_fields]
 			return elos
