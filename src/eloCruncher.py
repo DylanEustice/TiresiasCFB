@@ -316,10 +316,10 @@ def rating_adjuster(Ri, params, elo_diff, MoV, max_MoV_mult=1e3):
 	return new_Ri
 
 
-def append_elos_to_dataFrame():
+def append_elos_to_dataFrame(shift=True, save=True):
 	"""
 	"""
-	elos = gen_elo_files()
+	elos = gen_elo_files(shift=shift, save=save)
 	all_data = util.load_all_dataFrame()
 	# Get game and team ids
 	gids = [gid for gid in all_data['Id']]
@@ -346,7 +346,8 @@ def append_elos_to_dataFrame():
 		all_data['this_' + t] = pd.Series(this_elos, index=all_data.index)
 		all_data['other_' + t] = pd.Series(other_elos, index=all_data.index)
 	# Save
-	all_data.to_pickle(os.path.join('data', 'compiled_team_data', 'all.df'))
+	if save:
+		all_data.to_pickle(os.path.join('data', 'compiled_team_data', 'all.df'))
 	return all_data
 
 
@@ -364,7 +365,7 @@ def team_to_conf_map(teams):
 	return teamConf_map
 
 
-def gen_elo_files(shift=True):
+def gen_elo_files(shift=True, save=True):
 	"""
 	shift: shifts the elo of a game to be after the outcome
 	"""
@@ -396,7 +397,8 @@ def gen_elo_files(shift=True):
 								  roff_elos[tid][ixSeason][ix+s], 
 								  rdef_elos[tid][ixSeason][ix+s]]
 	# Save files to JSON
-	util.dump_json(elos, "elos.json", fdir=default.elo_dir)
+	if save:
+		util.dump_json(elos, "elos.json", fdir=default.elo_dir)
 	return elos
 
 def sep_off_def_elos(elos):
@@ -607,7 +609,7 @@ def build_games(all_data=None):
 	data = np.array([all_data['Id'],
 		all_data['this_TeamId'], all_data['other_TeamId'],
 		all_data['this_Score'], all_data['other_Score'],
-		all_data['this_ConfId'], all_data['other_ConfId'],
+		all_data['this_conferenceId'], all_data['other_conferenceId'],
 		all_data['this_Passing Yds'], all_data['other_Passing Yds'],
 		all_data['this_Rushing Yds'], all_data['other_Rushing Yds']])
 	# Find time between games
@@ -629,7 +631,7 @@ def build_elo_mats(all_data=None, distinct_home=False, season_range=range(2006,2
 	"""
 	"""
 	if all_data is None:
-		all_data = util.load_all_dataFrame()
+		all_data = append_elos_to_dataFrame(shift=False, save=False)
 	if distinct_home:
 		ixHome = all_data['is_home'] == True
 		all_data = all_data[ixHome]
