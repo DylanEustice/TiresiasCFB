@@ -106,40 +106,40 @@ class Team:
 		ax.grid('on')
 		return ax
 
-	def get_training_data(self, prm, teams_dict, inp_fields, tar_fields, **kwargs):
+	def get_training_data(self, dataset, teams_dict, **kwargs):
 		"""
 		"""
 		min_games_in_season = 8
 		# Get games after minimum date
 		games = []
-		ixAfterMin = np.array(self.games['DateUtc'] > prm.min_date)
-		ixBeforeMax = np.array(self.games['DateUtc'] < prm.max_date)
+		ixAfterMin = np.array(self.games['DateUtc'] > dataset.min_date)
+		ixBeforeMax = np.array(self.games['DateUtc'] < dataset.max_date)
 		ixValid = np.logical_and(ixAfterMin, ixBeforeMax)
 		valid_games = self.games[ixValid]
 		for _, g in valid_games.iterrows():
-			if prm.min_games > 0:
+			if dataset.min_games > 0:
 				# Don't repeat games if selected
-				if prm.home_only and not g['is_home']:
+				if dataset.home_only and not g['is_home']:
 					continue
 				# Get games within a certain previous range
-				this_prev_games = get_games_in_range(self.games, g['DateUtc'], prm.date_diff)
+				this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff)
 				# From previous games, build data array
-				if this_prev_games.shape[0] < prm.min_games:
+				if this_prev_games.shape[0] < dataset.min_games:
 					continue
 				# Get data from other team
 				other_tid = g['other_TeamId']
 				other_team = teams_dict[other_tid]
-				other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], prm.date_diff)
+				other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff)
 				# Other team must also have enough games
-				if other_prev_games.shape[0] < prm.min_games:
+				if other_prev_games.shape[0] < dataset.min_games:
 					continue
 				# Build data
-				this_inp_data_all = build_data_from_games(this_prev_games, inp_fields)
-				this_inp_data = prm.inp_avg(this_inp_data_all, **kwargs)
-				other_inp_data_all = build_data_from_games(other_prev_games, inp_fields)
-				other_inp_data = prm.inp_avg(other_inp_data_all, **kwargs)
+				this_inp_data_all = build_data_from_games(this_prev_games, dataset.inp_fields)
+				this_inp_data = dataset.avg_func(this_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
+				other_inp_data_all = build_data_from_games(other_prev_games, dataset.inp_fields)
+				other_inp_data = dataset.avg_func(other_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
 				inp_data = np.hstack([this_inp_data, other_inp_data])
-				tar_data = build_data_from_games(g, tar_fields)
+				tar_data = build_data_from_games(g, dataset.tar_fields)
 				if tar_data.shape[0] > 1:
 					tar_data = tar_data.reshape(1,tar_data.shape[0])
 				this_game = dict([('inp',inp_data), ('tar',tar_data), ('id',g['Id'])])
