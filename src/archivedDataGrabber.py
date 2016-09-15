@@ -7,13 +7,13 @@ import src.default_parameters as default
 
 EXCLUDE_CONCAT_FIELDS = ['Id', 'DateUtc', 'Season', 'is_home']
 
-def load_and_save_archived_data(years=range(2005,2013)):
+def load_and_save_archived_data(years=default.arch_data_years):
 	all_data = load_all_archived_data(years=years)
 	save_dir = os.path.join('data', 'compiled_team_data')
 	all_data.to_pickle(os.path.join(save_dir, 'archived.df'))
 	return all_data
 
-def load_all_archived_data(years=range(2005,2013)):
+def load_all_archived_data(years=default.arch_data_years):
 	"""
 	Load data for past seasons. Comes from different source.
 	"""
@@ -224,7 +224,7 @@ def map_team_ids(save=False):
 		dump_json(mapping, 'team_id_mapping.json', fdir=os.path.join('data', 'archived_data'))
 	return mapping
 
-def map_conf_ids(years=range(2005,2014), save=False):
+def map_conf_ids(years=default.arch_data_years, save=False):
 	"""
 	Generate (as well as possible) a mapping between conferece ids for the data sources.
 	"""
