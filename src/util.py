@@ -74,14 +74,6 @@ def copy_dir(src, dst):
 			raise Exception()
 
 
-def grab_scraper_data(src=os.path.join('..','BarrelRollCFBData','data'),
-					  dst=os.path.join('data')):
-	"""
-	Copy in data directory from BarrelRollCFBData
-	"""
-	copy_dir(src, dst)
-
-
 def load_team_DataFrame(team_id, dir=default.comp_team_dir):
 	fname = str(team_id) + '_DataFrame.df'
 	return pd.read_pickle(os.path.join(path_to_data, fname))
@@ -98,7 +90,8 @@ def standardize_data(data, std=None, mean=None):
 		std = data.std(axis=0)
 	if mean is None:
 		mean = data.mean(axis=0)
-	return np.divide(data - mean, std), std, mean
+	norm_params = dict([('std',std), ('mean',mean)])
+	return np.divide(data - mean, std), norm_params
 
 
 def normalize_data(data, min_=None, max_=None):
@@ -112,7 +105,8 @@ def normalize_data(data, min_=None, max_=None):
 		min_ = data.min(axis=0)
 	if max_ is None:
 		max_ = data.max(axis=0)
-	return np.divide(data - min_, max_), min_, max_
+	norm_params = dict([('min_',min_), ('max_',max_)])
+	return np.divide(data - min_, max_), norm_params
 
 
 def moving_avg(data, n=10):

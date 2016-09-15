@@ -1,6 +1,6 @@
 import os
 import re
-from src.util import load_json, dump_json, grab_scraper_data, load_all_dataFrame, load_schedule
+from src.util import load_json, dump_json, load_all_dataFrame, load_schedule
 from src.team import build_all_teams
 import pandas as pd
 import csv
@@ -11,9 +11,9 @@ from src.eloCruncher import append_elos_to_dataFrame
 import numpy as np
 
 
-def build_all_from_scratch(refresh_data=True, years='all'):
+def build_all_from_scratch(years='all'):
 	print "Compiling teams ..."
-	compile_and_save_teams(years=years, refresh_data=refresh_data)
+	compile_and_save_teams(years=years)
 	compile_fields()
 	print "Indexing games ..."
 	index_game_folders()
@@ -99,11 +99,11 @@ def add_archived_data(arch_years=range(2005,2013)):
 	all_data.to_pickle(os.path.join(default.comp_team_dir, 'all.df'))
 
 
-def compile_and_save_teams(years='all', refresh_data=False):
+def compile_and_save_teams(years='all'):
 	"""
 	Compile all teams into dictionaries and save as json
 	"""
-	teams = compile_teams(years=years, refresh_data=refresh_data)
+	teams = compile_teams(years=years)
 	dump_json(teams, 'all.json', fdir=default.comp_team_dir, indent=4)
 	for tid, team in teams.iteritems():
 		dump_json(team, team['school'] + '.json', fdir=default.comp_team_dir, indent=4)
@@ -194,14 +194,10 @@ def extract_lines_from_schedule():
 	dump_json(lines, 'lines.json', fdir=default.comp_team_dir)
 
 
-def compile_teams(years='all', refresh_data=False):
+def compile_teams(years='all'):
 	"""
 	Compile teams from inputted year range into dictionaries.
-	'refresh_data' will delete the current data and reload it
-	from BarrelRollCFB.
 	"""
-	if refresh_data:
-		grab_scraper_data()
 	teams = {}
 	game_index = load_json(os.path.join('data', 'game_index.json'))
 	teamgame_index = load_json(os.path.join('data', 'teamgame_index.json'))
