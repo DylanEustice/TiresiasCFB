@@ -219,7 +219,7 @@ def map_team_ids(save=False):
 		ixName = arch_teams['Name'].values == name
 		if any(ixName):
 			mapping[tid] = str(arch_teams['Team Code'].values[ixName][0])
-	mapping = dict([(old,new) for new,old in mapping.iteritems()])
+	mapping = dict([(old,new) if old != "" else ("old"+new,new) for new,old in mapping.iteritems()])
 	if save:
 		dump_json(mapping, 'team_id_mapping.json', fdir=os.path.join('data', 'archived_data'))
 	return mapping
