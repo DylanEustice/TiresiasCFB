@@ -18,7 +18,7 @@ class Season:
 		self._year = year
 		self._teams = build_all_teams(years=range(2005, year+1))
 		self._schedule = util.load_schedule(year=year)
-		self._lines = util.load_json('lines.json', fdir=default.comp_team_dir)
+		self._lines = util.load_json('lines.json', fdir=os.path.join('data', str(default.this_year)))
 		self._sim_type = sim_type
 
 		all_data = util.load_all_dataFrame()
@@ -76,8 +76,12 @@ class Season:
 			results[gid]['Home_TeamName'] = home.name
 			results[gid]['Away_TeamName'] = away.name
 			# Betting
-			results[gid]['Spread'] = self._lines[gid]['Spread']
-			results[gid]['OverUnder'] = self._lines[gid]['OverUnder']
+			try:
+				results[gid]['Spread'] = self._lines[gid]['Spread']
+				results[gid]['OverUnder'] = self._lines[gid]['OverUnder']
+			except KeyError:
+				results[gid]['Spread'] = np.nan
+				results[gid]['OverUnder'] = np.nan
 			if self._scores:
 				results[gid]['Home_Score'] = scores[0]
 				results[gid]['Away_Score'] = scores[1]
@@ -169,20 +173,22 @@ class Season:
 			mse = np.mean(np.power(results['act_score'] - results['pred_score'],2))
 			# Print
 			nGame = len(corr_game)
-			print "Straight Up: {:2f} ({} of {})".format(100*np.mean(corr_game),
+			print "Straight Up: {:2f} ({} and {})".format(100*np.mean(corr_game),
 				sum(corr_game), nGame-sum(corr_game))
-			print "     Spread: {:2f} ({} of {})".format(100*np.mean(corr_spread),
+			print "     Spread: {:2f} ({} and {})".format(100*np.mean(corr_spread),
 				sum(corr_spread), nGame-sum(corr_spread))
-			print "  OverUnder: {:2f} ({} of {})".format(100*np.mean(corr_overUnd),
+			print "  OverUnder: {:2f} ({} and {})".format(100*np.mean(corr_overUnd),
 				sum(corr_overUnd), nGame-sum(corr_overUnd))
 			print "       Bias: {:2f}, {:2f} (Home), {:2f} (Away))".format(bias, bias_home, bias_away)
 			print "    Abs Err: {:2f}, {:2f} (Home), {:2f} (Away))".format(abserr, abserr_home, abserr_away)
 			print "        MSE: {:2f}, {:2f} (Home), {:2f} (Away))".format(mse, mse_home, mse_away)
 		else:
-			corr_game = results['Home_Pr'] > 0.5 == results['act_diff'] > 0
+			home_pred = results['pred_pct'] > 0.5
+			home_act = results['act_diff'] > 0
+			corr_game = [hp==ha for hp,ha in zip(home_pred, home_act)]
 			# Print
 			nGame = len(corr_game)
-			print "Straight Up: {:2f} ({} of {})".format(100*np.mean(corr_game),
+			print "Straight Up: {:2f} ({} and {})".format(100*np.mean(corr_game),
 				sum(corr_game), nGame-sum(corr_game))
 
 	def _sim_game(self, home, away, date):

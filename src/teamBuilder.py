@@ -177,7 +177,7 @@ def extract_lines_from_schedule():
 	overUnder = schedule['OverUnder'].values[ixUse]
 	gids = schedule['Id'].values[ixUse]
 	try:
-		lines = load_json('lines.json', fdir=default.comp_team_dir)
+		lines = load_json('lines.json', fdir=os.path.join('data', str(default.this_year)))
 	except IOError:
 		lines = {}
 	for i, gid in enumerate(gids):
@@ -191,7 +191,7 @@ def extract_lines_from_schedule():
 				lines[gid]['Spread'] = spreads[i]
 			if not np.isnan(overUnder[i]):
 				lines[gid]['OverUnder'] = overUnder[i]
-	dump_json(lines, 'lines.json', fdir=default.comp_team_dir)
+	dump_json(lines, 'lines.json', fdir=os.path.join('data', str(default.this_year)))
 
 
 def compile_teams(years='all'):

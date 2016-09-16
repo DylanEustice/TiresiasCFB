@@ -325,7 +325,7 @@ def append_elos_to_dataFrame(shift=True, save=True):
 	gids = [gid for gid in all_data['Id']]
 	this_tids = [tid for tid in all_data['this_TeamId']]
 	other_tids = [tid for tid in all_data['other_TeamId']]
-	types = ['wl_elo', 'off_elo', 'def_elo', 'cf_elo', 'poff_elo', 'pdef_elo', 'roff_elo', 'rdef_elo']
+	types = [t[5:] for t in default.this_elo_fields]
 	tid_elos = dict([(tid,[]) for tid in this_tids])
 	for i, t in enumerate(types):
 		this_elos = []
