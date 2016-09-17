@@ -197,7 +197,11 @@ class Season:
 		if self._sim_type == 'elo_simple_lin_regress':
 			home_elos = home.get_current_elos(next_game_date=date)
 			away_elos = away.get_current_elos(next_game_date=date)
-			return elo_lin_regress_sim(home_elos, away_elos, self._B)
+			raw_scores = elo_lin_regress_sim(home_elos[:4], away_elos[:4], self._B)
+			scores = np.zeros(raw_scores.shape[0])
+			scores[0] = raw_scores[0] + 0.75
+			scores[1] = raw_scores[1] - 0.75
+			return scores
 		elif self._sim_type == 'pure_elo':
 			home_elo = home.get_current_elos(next_game_date=date)[0]
 			away_elo = away.get_current_elos(next_game_date=date)[0]
