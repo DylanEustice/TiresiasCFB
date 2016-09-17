@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import datetime
 import pickle
+import os
 
 
 class Dataset:
@@ -12,6 +13,7 @@ class Dataset:
 		# Optionally load in parameters
 		if name is None:
 			return
+		self._name = name
 		self._info = util.load_json(name+'.json', fdir=name_dir)
 		# Params
 		self.min_date = datetime.datetime(*self._info['min_date'])
@@ -46,15 +48,15 @@ class Dataset:
 
 
 	@classmethod
-	def load(dataset, fname, fdir=default.data_dir):
+	def load(dataset, name, fdir=default.data_dir):
 		this = dataset(*[None])
-		with open(os.path.join(fdir, fname),"r") as f:
+		with open(os.path.join(fdir, name+'.ds'),"r") as f:
 			this = pickle.load(f)
 		return this
 
 
-	def save(self, fname, fdir=default.data_dir):
-		with open(os.path.join(fdir, fname),"w") as f:
+	def save(self, fdir=default.data_dir):
+		with open(os.path.join(fdir, self._name+'.ds'),"w") as f:
 			pickle.dump(self, f)
 
 
