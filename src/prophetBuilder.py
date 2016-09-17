@@ -243,16 +243,3 @@ def plot_data(net, error, train, test, alpha=0.1):
 	# test
 	ax2.plot(np.ndarray.flatten(test['norm_tar'])[idx[1]], 'o', alpha=alpha)
 	ax2.plot(np.ndarray.flatten(out[1])[idx[1]], 'o', alpha=alpha)
-
-
-def partition_data_to_teams(all_data):
-	"""
-	Partitions data from full pandas array into a
-	dictionary with a key for each team ID found
-	"""
-	team_ids = all_data['this_TeamId']
-	unq_ids = np.unique(team_ids)
-	data_by_team = {}
-	for id_ in unq_ids:
-		data_by_team[id_] = all_data[all_data['this_TeamId']==id_]
-	return data_by_team
