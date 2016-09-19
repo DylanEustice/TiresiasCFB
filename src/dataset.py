@@ -50,8 +50,11 @@ class Dataset:
 	@classmethod
 	def load(dataset, name, fdir=default.data_dir):
 		this = dataset(*[None])
-		with open(os.path.join(fdir, name+'.ds'),"r") as f:
-			this = pickle.load(f)
+		try:
+			with open(os.path.join(fdir, name+'.ds'),"r") as f:
+				this = pickle.load(f)
+		except IOError:
+			this = Dataset(name)
 		return this
 
 
