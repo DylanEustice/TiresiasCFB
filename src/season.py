@@ -152,12 +152,14 @@ class Season:
 			act = results['act_score'][:,0] > results['act_score'][:,1]
 			corr_game = pred == act
 			# Spread
-			pred = results['pred_diff_adj'] > 0
-			act = results['act_diff_adj'] > 0
+			ixNumSpread = np.logical_not(np.isnan(results['pred_diff_adj']))
+			pred = results['pred_diff_adj'][ixNumSpread] > 0
+			act = results['act_diff_adj'][ixNumSpread] > 0
 			corr_spread = pred == act
 			# Overunder
-			pred = results['pred_sum_adj'] > 0
-			act = results['act_sum_adj'] > 0
+			ixNumOverUnd = np.logical_not(np.isnan(results['pred_diff_adj']))
+			pred = results['pred_sum_adj'][ixNumOverUnd] > 0
+			act = results['act_sum_adj'][ixNumOverUnd] > 0
 			corr_overUnd = pred == act
 			# Bias
 			bias_home = np.mean(results['act_score'][:,0] - results['pred_score'][:,0])
@@ -173,12 +175,14 @@ class Season:
 			mse = np.mean(np.power(results['act_score'] - results['pred_score'],2))
 			# Print
 			nGame = len(corr_game)
+			nSpread = sum(ixNumSpread)
+			nOverUnd = sum(ixNumOverUnd)
 			print "Straight Up: {:2f} ({} and {})".format(100*np.mean(corr_game),
 				sum(corr_game), nGame-sum(corr_game))
 			print "     Spread: {:2f} ({} and {})".format(100*np.mean(corr_spread),
-				sum(corr_spread), nGame-sum(corr_spread))
+				sum(corr_spread), nSpread-sum(corr_spread))
 			print "  OverUnder: {:2f} ({} and {})".format(100*np.mean(corr_overUnd),
-				sum(corr_overUnd), nGame-sum(corr_overUnd))
+				sum(corr_overUnd), nOverUnd-sum(corr_overUnd))
 			print "       Bias: {:2f}, {:2f} (Home), {:2f} (Away))".format(bias, bias_home, bias_away)
 			print "    Abs Err: {:2f}, {:2f} (Home), {:2f} (Away))".format(abserr, abserr_home, abserr_away)
 			print "        MSE: {:2f}, {:2f} (Home), {:2f} (Away))".format(mse, mse_home, mse_away)
