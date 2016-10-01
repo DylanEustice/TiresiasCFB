@@ -319,32 +319,48 @@ def rating_adjuster(Ri, params, elo_diff, MoV, max_MoV_mult=1e3):
 def append_elos_to_dataFrame(shift=True, save=True):
 	"""
 	"""
-	elos = gen_elo_files(shift=shift, save=save)
+	elos = gen_elo_files(etype='Optimal', shift=shift, save=save)
+	rank_elos = gen_elo_files(etype='Ranking', shift=shift, save=save)
 	all_data = util.load_all_dataFrame()
 	# Get game and team ids
 	gids = [gid for gid in all_data['Id']]
 	this_tids = [tid for tid in all_data['this_TeamId']]
 	other_tids = [tid for tid in all_data['other_TeamId']]
 	types = [t[5:] for t in default.this_elo_fields]
-	tid_elos = dict([(tid,[]) for tid in this_tids])
+	# Loop through elo types
 	for i, t in enumerate(types):
 		this_elos = []
 		other_elos = []
+		this_elos_rank = []
+		other_elos_rank = []
+		# Loop through games
+		tid_elos = dict([(tid,[]) for tid in this_tids])
+		tid_elos_rank = dict([(tid,[]) for tid in this_tids])
 		for gid, this_tid, other_tid in zip(gids, this_tids, other_tids):
 			# If game not here, just use teams' previous elo score
 			if gid in elos:
 				this_elo = elos[gid][this_tid][i]
 				other_elo = elos[gid][other_tid][i]
+				this_elo_rank = rank_elos[gid][this_tid][i]
+				other_elo_rank = rank_elos[gid][other_tid][i]
 			else:
 				this_elo = tid_elos[this_tid][-1]
 				other_elo = tid_elos[other_tid][-1]
+				this_elo_rank = tid_elos_rank[this_tid][-1]
+				other_elo_rank = tid_elos_rank[other_tid][-1]
 			# Save elo
 			tid_elos[this_tid].append(this_elo)
 			tid_elos[other_tid].append(other_elo)
+			tid_elos_rank[this_tid].append(this_elo_rank)
+			tid_elos_rank[other_tid].append(other_elo_rank)
 			this_elos.append(this_elo)
 			other_elos.append(other_elo)
+			this_elos_rank.append(this_elo_rank)
+			other_elos_rank.append(other_elo_rank)
 		all_data['this_' + t] = pd.Series(this_elos, index=all_data.index)
 		all_data['other_' + t] = pd.Series(other_elos, index=all_data.index)
+		all_data['this_rank_' + t] = pd.Series(this_elos_rank, index=all_data.index)
+		all_data['other_rank_' + t] = pd.Series(other_elos_rank, index=all_data.index)
 	# Save
 	if save:
 		all_data.to_pickle(os.path.join('data', 'compiled_team_data', 'all.df'))
@@ -365,12 +381,12 @@ def team_to_conf_map(teams):
 	return teamConf_map
 
 
-def gen_elo_files(shift=True, save=True):
+def gen_elo_files(etype='Optimal', shift=True, save=True):
 	"""
 	shift: shifts the elo of a game to be after the outcome
 	"""
 	teams = build_all_teams()
-	wl_elos, od_elos, cf_elos, pod_elos, rod_elos, teamgid_map, confgid_map = run_best_elos()
+	wl_elos, od_elos, cf_elos, pod_elos, rod_elos, teamgid_map, confgid_map = run_best_elos(etype=etype)
 	# Seperate offensive and defensive elos
 	off_elos, def_elos = sep_off_def_elos(od_elos)
 	poff_elos, pdef_elos = sep_off_def_elos(pod_elos)
@@ -398,7 +414,7 @@ def gen_elo_files(shift=True, save=True):
 								  rdef_elos[tid][ixSeason][ix+s]]
 	# Save files to JSON
 	if save:
-		util.dump_json(elos, "elos.json", fdir=default.elo_dir)
+		util.dump_json(elos, etype+'_elos.json', fdir=default.elo_dir)
 	return elos
 
 def sep_off_def_elos(elos):
@@ -412,15 +428,15 @@ def sep_off_def_elos(elos):
 	return off_elos, def_elos
 
 
-def run_best_elos():
+def run_best_elos(etype='Optimal'):
 	"""
 	"""
 	# Load parameter files
-	wl_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Winloss_Params.txt'))
-	od_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Offdef_Params.txt'))
-	cf_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_Conf_Params.txt'))
-	pod_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_PassYd_Params.txt'))
-	rod_params = np.loadtxt(os.path.join(default.elo_dir, 'Optimal_RushYd_Params.txt'))
+	wl_params = np.loadtxt(os.path.join(default.elo_dir, etype+'_Winloss_Params.txt'))
+	od_params = np.loadtxt(os.path.join(default.elo_dir, etype+'_Offdef_Params.txt'))
+	cf_params = np.loadtxt(os.path.join(default.elo_dir, etype+'_Conf_Params.txt'))
+	pod_params = np.loadtxt(os.path.join(default.elo_dir, etype+'_PassYd_Params.txt'))
+	rod_params = np.loadtxt(os.path.join(default.elo_dir, etype+'_RushYd_Params.txt'))
 	# Load data
 	all_data = util.load_all_dataFrame()
 	games, dates_diff = build_games()
