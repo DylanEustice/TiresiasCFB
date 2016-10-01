@@ -15,15 +15,16 @@ class Season:
 		"""
 		sim_type: elo_simple_lin_regress
 		"""
+		# Season info
 		self._year = year
 		self._teams = build_all_teams(years=range(2005, year+1))
 		self._schedule = util.load_schedule(year=year)
 		self._lines = util.load_json('lines.json', fdir=os.path.join('data', str(default.this_year)))
 		self._sim_type = sim_type
-
+		# Data
 		all_data = util.load_all_dataFrame()
 		self._games = all_data[all_data['Season'] == self._year]
-
+		# Sim info
 		if self._sim_type == 'elo_simple_lin_regress':
 			fname = os.path.join(default.elo_dir, 'Linear_Regression_Beta.txt')
 			self._B = np.loadtxt(fname)
