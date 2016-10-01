@@ -138,6 +138,8 @@ class Team:
 				this_inp_data = dataset.avg_func(this_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
 				other_inp_data_all = build_data_from_games(other_prev_games, dataset.inp_fields)
 				other_inp_data = dataset.avg_func(other_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
+				if not (this_inp_data.shape[0] and other_inp_data.shape[0]):
+					continue
 				inp_data = np.hstack([this_inp_data, other_inp_data])
 				tar_data = build_data_from_games(g, dataset.tar_fields)
 				if tar_data.shape[0] > 1:
