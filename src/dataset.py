@@ -46,7 +46,6 @@ class Dataset:
 		# Build
 		self._build_dataset()
 
-
 	@classmethod
 	def load(dataset, name, fdir=default.data_dir):
 		this = dataset(*[None])
@@ -57,17 +56,14 @@ class Dataset:
 			this = Dataset(name)
 		return this
 
-
 	def save(self, fdir=default.data_dir):
 		with open(os.path.join(fdir, self._name+'.ds'),"w") as f:
 			pickle.dump(self, f)
-
 
 	def _build_dataset(self):
 		self._build_train_games()
 		self._set_full_dataset()
 		self._partition_dataset()
-
 
 	def _build_train_games(self):
 	# Extract game training data
@@ -77,13 +73,11 @@ class Dataset:
 			print t.tid
 			self._train_games.extend(t.get_training_data(self, teams_dict))
 
-
 	def _set_full_dataset(self):
 		self.all_raw_inp = np.vstack([g['inp'] for g in self._train_games]).astype('double')
 		self.all_raw_tar = np.vstack([g['tar'] for g in self._train_games]).astype('double')
 		self.all_norm_inp, self.inp_norm_params = self._norm_func(self.all_raw_inp)
 		self.all_norm_tar, self.tar_norm_params = self._norm_func(self.all_raw_tar)
-
 
 	def _partition_dataset(self):
 		# Get partition indeces
@@ -103,7 +97,6 @@ class Dataset:
 		self.test_norm_tar = self.all_norm_tar[ixTest,:]
 		self.test_raw_inp = self.all_raw_inp[ixTest,:]
 		self.test_raw_tar = self.all_raw_tar[ixTest,:]
-
 
 	def print_date_range(self):
 		print "{} to {}".format(self._min_date, self._max_date)
