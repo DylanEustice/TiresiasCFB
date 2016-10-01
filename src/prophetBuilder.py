@@ -9,20 +9,19 @@ import datetime
 import src.util as util
 from src.team import build_all_teams
 import src.default_parameters as default
+from src.dataset import Dataset
+import neurolab as nl
 
 
-class Params:
-	def __init__(self, io_name, io_dir, min_games, min_date, max_date, trainf, lyr,
-		train_pct, lr, epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg,
-		norm_func, date_diff, home_only):
-		self.io_name = io_name
-		self.io_dir = io_dir
-		self.min_games = min_games
-		self.min_date = min_date
-		self.max_date = max_date
-		self.trainf = trainf
+class Network:
+	def __init__(self, dsname, trainf='train_gdm', lyr=[nl.trans.TanSig(),nl.trans.TanSig()],
+		lr=0.0001, epochs=100, update_freq=20, show=20, minmax=1.0, hid_lyr=10, ibias=1.0, norm=True):
+		self.ds = Dataset.load(dsname)
+		self.norm = norm
+		self.set_train_data()
+		# training parameters
+		self.trainf = getattr(nl.train, trainf)
 		self.lyr = lyr
-		self.train_pct = train_pct
 		self.lr = lr
 		self.epochs = epochs
 		self.update_freq = update_freq
@@ -30,15 +29,13 @@ class Params:
 		self.minmax = minmax
 		self.hid_lyr = hid_lyr
 		self.ibias = ibias
-		self.inp_avg = inp_avg
-		self.norm_func = norm_func
-		self.date_diff = date_diff
-		self.home_only = home_only
-		self.kwargs = {}
+		# neural network
+		self.set_train_kwargs()
+		self.net = self.setup_network()
 
 	@classmethod
-	def load(prms, fname, fdir=default.prm_dir):
-		this = prms(*[None]*19)
+	def load(network, fname, fdir=default.prm_dir):
+		this = network(*[None]*11)
 		with open(os.path.join(fdir, fname),"r") as f:
 			this = pickle.load(f)
 		return this
@@ -55,85 +52,79 @@ class Params:
 	def get_members(self):
 		return [attr for attr in dir(self) if not attr.startswith("__")]
 
+	def set_train_data(self):
+		if self.norm:
+			self.train_inp = self.ds.train_norm_inp
+			self.train_tar = self.ds.train_norm_tar
+			self.test_inp = self.ds.test_norm_inp
+			self.test_tar = self.ds.test_norm_tar
+		else:
+			self.train_inp = self.ds.train_raw_inp
+			self.train_tar = self.ds.train_raw_tar
+			self.test_inp = self.ds.test_raw_inp
+			self.test_tar = self.ds.test_raw_tar
 
-def build_dataset(prm):
-	"""
-	prm:	paramters file
-	"""
-	# Load data
-	all_data = util.load_all_dataFrame()
-	teams = build_all_teams(all_data=all_data)
-	# Read I/O fields
-	io_fields = util.load_json(prm.io_name, fdir=prm.io_dir)
-	inp_fields = io_fields['inputs']
-	tar_fields = io_fields['outputs']
-	# Keyword args for data averaging
-	if prm.inp_avg is np.mean:
-		kwargs = dict([('axis',0)])
-	elif prm.inp_avg is util.elo_mean:
-		kwargs = dict([('fields',inp_fields)])
-	# Extract game training data
-	games = []
-	teams_dict = dict([(t.tid, t) for t in teams])
-	for t in teams:
-		print t.tid
-		games.extend(t.get_training_data(prm, teams_dict, inp_fields, tar_fields, **kwargs))
-	# Build dataset
-	full_dataset = {}
-	full_dataset['raw_inp'] = np.vstack([g['inp'] for g in games])
-	full_dataset['raw_tar'] = np.vstack([g['tar'] for g in games])
-	full_dataset['norm_inp'] = prm.norm_func(full_dataset['raw_inp'].astype('double'))
-	full_dataset['norm_tar'] = prm.norm_func(full_dataset['raw_tar'].astype('double'))
-	full_dataset['norm_func'] = str(prm.norm_func)
-	full_dataset['games'] = games
-	# Partition dataset and return
-	dataset = partition_data(full_dataset, train_pct=prm.train_pct)
-	return dataset
+	def set_train_kwargs(self):
+		self.train_kwargs = dict([('epochs', self.update_freq), ('show', self.show)])
+		if self.trainf is not nl.train.train_bfgs:
+			self.train_kwargs['lr'] = self.lr
 
+	def setup_network(self):
+		lyr_rng = zip([0.]*self.train_inp.shape[1], [1.]*self.train_inp.shape[1])
+		net = nl.net.newff(lyr_rng, [self.hid_lyr, self.train_tar.shape[1]], self.lyr)
+		net.trainf = self.trainf
+		for l in net.layers:
+			l.initf = nl.init.InitRand([-self.minmax, self.minmax], 'wb')
+		net.layers[0].np['b'][:] = self.ibias
+		net.errorf = nl.error.MSE()
+		return net
 
-def partition_data(data, train_pct=0.5):
-	"""
-	Randomly partition games for training and validation
-	games:		list of games to be partitioned
-	data:		input/target raw/normalized data
-	train_pct:	percentage of data used for training
-	"""
-	games = data['games']
-	gids = list(set(g['id'] for g in games))
-	rnd_vec = np.random.random(len(gids))
-	train_idx = rnd_vec < train_pct
-	train_gids = {id_ for i, id_ in enumerate(gids) if train_idx[i]}
-	# partition
-	train = {}
-	train['norm_inp'] = data['norm_inp'][np.array([g['id'] in train_gids for g in games]),:]
-	train['norm_tar'] = data['norm_tar'][np.array([g['id'] in train_gids for g in games]),:]
-	train['raw_inp'] = data['raw_inp'][np.array([g['id'] in train_gids for g in games]),:]
-	train['raw_tar'] = data['raw_tar'][np.array([g['id'] in train_gids for g in games]),:]
-	test = {}
-	test['norm_inp'] = data['norm_inp'][np.array([g['id'] not in train_gids for g in games]),:]
-	test['norm_tar'] = data['norm_tar'][np.array([g['id'] not in train_gids for g in games]),:]
-	test['raw_inp'] = data['raw_inp'][np.array([g['id'] not in train_gids for g in games]),:]
-	test['raw_tar'] = data['raw_tar'][np.array([g['id'] not in train_gids for g in games]),:]
-	out_data = {'train': train, 'test': test}
-	return out_data
+	def train_network(self):
+		"""
+		"""
+		error_test = []
+		error_train = []
+		msef = nl.error.MSE()
+		best_net = copy.deepcopy(self.net)
+		best_error = float('inf')
+		test_data_acc = dict([('inp', self.test_inp), ('tar', self.test_tar)])
+		train_data_acc = dict([('inp', self.train_inp), ('tar', self.train_tar)])
+		for i in range(self.epochs / self.update_freq):
+			error_tmp = self.net.train(self.train_inp, self.train_tar, **self.train_kwargs)
+			error_train.append(msef(self.train_tar, self.net.sim(self.train_inp)))
+			error_test.append(msef(self.test_tar, self.net.sim(self.test_inp)))
+			if error_test[-1] < best_error:
+				best_net = copy.deepcopy(self.net)
+			print "Iters    : {} / {}".format(i*self.update_freq, self.epochs)
+			print "Train    : {}".format(error_train[-1])
+			print " Test    : {}".format(error_test[-1])
+			print "Train Acc: {}".format(util.get_winner_acc(self.net, self.train_inp, self.train_tar))
+			print " Test Acc: {}".format(util.get_winner_acc(self.net, self.test_inp, self.test_tar))
+		self.net = best_net
+		error = dict([('train',error_train), ('test',error_test)])
+		self.plot_sim(error=error)
 
+	def plot_sim(self, error=None, alpha=0.1):
+		"""
+		"""
+		plt.ion()
+		if error:
+			fig_error = plt.figure()
+			x = range(len(error['train']))
+			plt.plot(x, error['train'], x, error['test'])
+		fig_sim = plt.figure()
+		out = (self.net.sim(self.train_inp), self.net.sim(self.test_inp))
+		idx = (np.argsort(np.ndarray.flatten(self.train_tar)), 
+			   np.argsort(np.ndarray.flatten(self.test_tar)))
+		ax1_error = fig_sim.add_subplot(121)
+		ax2_error = fig_sim.add_subplot(122)
+		# train
+		ax1_error.plot(np.ndarray.flatten(self.train_tar)[idx[0]], 'o', alpha=alpha)
+		ax1_error.plot(np.ndarray.flatten(out[0])[idx[0]], 'o', alpha=alpha)
+		# test
+		ax2_error.plot(np.ndarray.flatten(self.test_tar)[idx[1]], 'o', alpha=alpha)
+		ax2_error.plot(np.ndarray.flatten(out[1])[idx[1]], 'o', alpha=alpha)
 
-def build_prms_file(prm_name, io_name, io_dir=default.io_dir, min_games=6,
-	hid_lyr=10, trainf=nl.train.train_gdm, lyr=[nl.trans.SoftMax(),nl.trans.PureLin()],
-	train_pct=0.5, lr=0.001, epochs=100, update_freq=20, show=20, minmax=1.0,
-	ibias=1.0, inp_avg=np.mean, norm_func=util.normalize_data, min_date=datetime.datetime(1900,1,1),
-	date_diff=datetime.timedelta(weeks=26), home_only=True):
-	"""
-	Build Params object and save to file
-	  Note: min_games = -1 -> autoencoder
-	  		min_games = 0  -> same game
-	"""
-	prms = Params(io_name, io_dir, min_games, min_date, trainf, lyr, train_pct, lr, 
-		epochs, update_freq, show, minmax, hid_lyr, ibias, inp_avg, norm_func, date_diff,
-		home_only)
-	with open(os.path.join(default.prm_dir, prm_name), 'w') as f:
-		pickle.dump(prms, f)
-	return prms
 
 
 def train_net_from_prms(prm=None, prm_name=None, data_file=None, fdir=default.data_dir):
@@ -185,31 +176,29 @@ def setup_network(train_data, prm):
 	return net
 
 
-def train_network(net, data, prm):
+def train_network(net, train_inp, train_tar, test_inp, test_tar, prm):
 	"""
 	Train neural network
 	net:	network to be trained
 	data:	training and testing data
 	prm:	paramters file
 	"""
-	train = data['train']
-	test = data['test']
+	train = train
+	test = test
 	error_test = []
 	error_train = []
 	msef = nl.error.MSE()
 	best_net = copy.deepcopy(net)
 	best_error = float('inf')
-	test_data_acc = dict([('inp', data['test']['norm_inp']), ('tar', data['test']['norm_tar'])])
-	train_data_acc = dict([('inp', data['train']['norm_inp']), ('tar', data['train']['norm_tar'])])
+	test_data_acc = dict([('inp', test_inp), ('tar', test_tar)])
+	train_data_acc = dict([('inp', train_inp), ('tar', train_tar)])
 	for i in range(prm.epochs / prm.update_freq):
 		if net.trainf is not nl.train.train_bfgs:
-			error_tmp = net.train(train['norm_inp'], train['norm_tar'],
-				epochs=prm.update_freq,	show=prm.show, lr=prm.lr)
+			error_tmp = net.train(train_inp, train_tar, epochs=prm.update_freq,	show=prm.show, lr=prm.lr)
 		else:
-			error_tmp = net.train(train['norm_inp'], train['norm_tar'],
-				epochs=prm.update_freq,	show=prm.show)
-		error_train.append(msef(train['norm_tar'], net.sim(train['norm_inp'])))
-		error_test.append(msef(test['norm_tar'], net.sim(test['norm_inp'])))
+			error_tmp = net.train(train_inp, train_tar, epochs=prm.update_freq,	show=prm.show)
+		error_train.append(msef(train_tar, net.sim(train_inp)))
+		error_test.append(msef(test_tar, net.sim(test_inp)))
 		if error_test[-1] < best_error:
 			best_net = copy.deepcopy(net)
 		print "Iters    : {} / {}".format(i*prm.update_freq, prm.epochs)
