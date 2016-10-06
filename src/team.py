@@ -46,7 +46,7 @@ class Team:
 			elo_fields = default.this_elo_fields
 
 		if next_game_date == "schedule" and self.schedule.shape[0]:
-			ixNotPlayed = np.array([int(id_) not in self.games['Id'] for id_ in self.schedule['Id']])
+			ixNotPlayed = self.schedule['DateUtc'].values > max(self.games['DateUtc'].values)
 			next_game_date = self.schedule['DateUtc'].values[ixNotPlayed][0]
 		elif next_game_date == "schedule":
 			elos = [self.games[f].values[-1] for f in elo_fields]
@@ -106,20 +106,29 @@ class Team:
 		ax.grid('on')
 		return ax
 
-	def get_training_data(self, dataset, teams_dict, **kwargs):
+	def get_training_data(self, dataset, teams_dict, use_schedule=False, **kwargs):
 		"""
 		"""
+		games_arr = self.games if not use_schedule else self.schedule
 		min_games_in_season = 8
 		# Get games after minimum date
 		games = []
-		ixAfterMin = np.array(self.games['DateUtc'] > dataset.min_date)
-		ixBeforeMax = np.array(self.games['DateUtc'] < dataset.max_date)
+		ixAfterMin = np.array(games_arr['DateUtc'] > dataset.min_date)
+		ixBeforeMax = np.array(games_arr['DateUtc'] < dataset.max_date)
 		ixValid = np.logical_and(ixAfterMin, ixBeforeMax)
-		valid_games = self.games[ixValid]
+		if use_schedule:
+			max_date = max(self.games['DateUtc'])
+			ixNotPlayed = [float(id_) not in self.games['Id'].values for id_ in games_arr['Id'].values]
+			ixValid = np.logical_and(ixValid, ixNotPlayed)
+			place_holder_tar = np.array([np.nan for _ in range(len(dataset.tar_fields))])
+		valid_games = games_arr[ixValid]
 		for _, g in valid_games.iterrows():
 			if dataset.min_games > 0:
 				# Don't repeat games if selected
 				if dataset.home_only and not g['is_home']:
+					continue
+				# Don't use game if other team is FCS
+				if g['other_TeamId'] not in teams_dict:
 					continue
 				# Get games within a certain previous range
 				this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff)
@@ -141,10 +150,10 @@ class Team:
 				if not (this_inp_data.shape[0] and other_inp_data.shape[0]):
 					continue
 				inp_data = np.hstack([this_inp_data, other_inp_data])
-				tar_data = build_data_from_games(g, dataset.tar_fields)
+				tar_data = build_data_from_games(g, dataset.tar_fields) if not use_schedule else place_holder_tar
 				if tar_data.shape[0] > 1:
 					tar_data = tar_data.reshape(1,tar_data.shape[0])
-				this_game = dict([('inp',inp_data), ('tar',tar_data), ('id',g['Id'])])
+				this_game = dict([('inp',inp_data), ('tar',tar_data), ('id',float(g['Id']))])
 				games.append(this_game)
 		return games
 
