@@ -44,7 +44,11 @@ class Dataset:
 		else:
 			assert False, "Unrecognized normalizing function!"
 		# Build
-		self._build_dataset()
+		self._build_train_games()
+		self._set_games_data()
+		self._set_full_dataset()
+		self._partition_dataset()
+		self._calculate_linear_regression()
 
 	@classmethod
 	def load(dataset, name, fdir=default.data_dir):
@@ -60,10 +64,8 @@ class Dataset:
 		with open(os.path.join(fdir, self._name+'.ds'),"w") as f:
 			pickle.dump(self, f)
 
-	def _build_dataset(self):
-		self._build_train_games()
-		self._set_full_dataset()
-		self._partition_dataset()
+	def _axis_isnan(self, A):
+		return np.any(np.isnan(A), axis=1)
 
 	def _build_train_games(self):
 	# Extract game training data
@@ -71,13 +73,24 @@ class Dataset:
 		teams_dict = dict([(t.tid, t) for t in self._teams])
 		for t in self._teams:
 			print t.tid
-			self._train_games.extend(t.get_training_data(self, teams_dict))
+			self._train_games.extend(t.get_training_data(self, teams_dict, use_schedule=False))
+			self._train_games.extend(t.get_training_data(self, teams_dict, use_schedule=True))
+
+	def _set_games_data(self):
+		self.games_data = {}
+		game_to_dict = lambda g: dict([('inp', g['inp']), ('tar', g['tar'])])
+		for g in self._train_games:
+			self.games_data[g['id']] = game_to_dict(g)
 
 	def _set_full_dataset(self):
 		self.all_raw_inp = np.vstack([g['inp'] for g in self._train_games]).astype('double')
 		self.all_raw_tar = np.vstack([g['tar'] for g in self._train_games]).astype('double')
-		self.all_norm_inp, self.inp_norm_params = self._norm_func(self.all_raw_inp)
-		self.all_norm_tar, self.tar_norm_params = self._norm_func(self.all_raw_tar)
+		not_or = lambda A, B: np.logical_not(np.logical_or(A, B))
+		ixValid = not_or(self._axis_isnan(self.all_raw_inp), self._axis_isnan(self.all_raw_tar))
+		_, self.inp_norm_params = self._norm_func(self.all_raw_inp[ixValid,:])
+		self.all_norm_inp, _ = self._norm_func(self.all_raw_inp, params=self.inp_norm_params)
+		_, self.tar_norm_params = self._norm_func(self.all_raw_tar[ixValid,:])
+		self.all_norm_tar, _ = self._norm_func(self.all_raw_tar, params=self.tar_norm_params)
 
 	def _partition_dataset(self):
 		# Get partition indeces
@@ -98,9 +111,17 @@ class Dataset:
 		self.test_raw_inp = self.all_raw_inp[ixTest,:]
 		self.test_raw_tar = self.all_raw_tar[ixTest,:]
 
+	def _calculate_linear_regression(self):
+		ixRawNaN = np.logical_or(self._axis_isnan(self.train_raw_inp),
+								 self._axis_isnan(self.train_raw_tar))
+		ixNormNaN = np.logical_or(self._axis_isnan(self.train_norm_inp),
+								  self._axis_isnan(self.train_norm_tar))
+		ixValid = np.logical_not(np.logical_or(ixRawNaN, ixNormNaN))
+		self.B_raw = util.linear_regression(self.train_raw_inp[ixValid,:], self.train_raw_tar[ixValid,:])
+		self.B_norm = util.linear_regression(self.train_norm_inp[ixValid,:], self.train_norm_tar[ixValid,:])
+
 	def print_date_range(self):
 		print "{} to {}".format(self._min_date, self._max_date)
-
 
 	def print_io_fields(self):
 		print "Input:"
