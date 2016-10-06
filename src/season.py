@@ -11,9 +11,9 @@ from src.eloCruncher import Pr_elo
 
 class Season:
 
-	def __init__(self, year=default.this_year, sim_type='elo_simple_lin_regress'):
+	def __init__(self, dataset, year=default.this_year, sim_type='lin_regress'):
 		"""
-		sim_type: elo_simple_lin_regress
+		sim_type: lin_regress
 		"""
 		# Season info
 		self._year = year
@@ -22,12 +22,9 @@ class Season:
 		self._lines = util.load_json('lines.json', fdir=os.path.join('data', str(default.this_year)))
 		self._sim_type = sim_type
 		# Data
+		self._dataset = dataset
 		all_data = util.load_all_dataFrame()
 		self._games = all_data[all_data['Season'] == self._year]
-		# Sim info
-		if self._sim_type == 'elo_simple_lin_regress':
-			fname = os.path.join(default.elo_dir, 'Linear_Regression_Beta.txt')
-			self._B = np.loadtxt(fname)
 
 		if self._sim_type == 'pure_elo':
 			self._scores = False
@@ -69,7 +66,7 @@ class Season:
 				# Eiher team not in valid teams
 				del results[gid]
 				continue
-			scores = self._sim_game(home, away, date)
+			scores = self._sim_game(gid)
 			# Set data
 			results[gid]['DateUtc'] = str(date)
 			results[gid]['Home_TeamId'] = home_tid
@@ -196,16 +193,17 @@ class Season:
 			print "Straight Up: {:2f} ({} and {})".format(100*np.mean(corr_game),
 				sum(corr_game), nGame-sum(corr_game))
 
-	def _sim_game(self, home, away, date):
+	def _sim_game(self, gid):
 		"""
 		"""
-		if self._sim_type == 'elo_simple_lin_regress':
-			home_elos = home.get_current_elos(next_game_date=date)
-			away_elos = away.get_current_elos(next_game_date=date)
-			raw_scores = elo_lin_regress_sim(home_elos[:4], away_elos[:4], self._B)
-			scores = np.zeros(raw_scores.shape[0])
-			scores[0] = raw_scores[0] + 0.75
-			scores[1] = raw_scores[1] - 0.75
+		if self._sim_type == 'lin_regress':
+			raw_scores = np.array(self._dataset.games_data[float(gid)]['inp'] * self._dataset.B_raw)
+			# home_elos = home.get_current_elos(next_game_date=date)
+			# away_elos = away.get_current_elos(next_game_date=date)
+			# raw_scores = elo_lin_regress_sim(home_elos[:4], away_elos[:4], self._B)
+			scores = np.zeros(raw_scores[0,:].shape[0])
+			scores[0] = raw_scores[0,0] + 1.5
+			scores[1] = raw_scores[0,1] - 1.5
 			return scores
 		elif self._sim_type == 'pure_elo':
 			home_elo = home.get_current_elos(next_game_date=date)[0]
