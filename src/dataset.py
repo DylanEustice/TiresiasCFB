@@ -29,6 +29,8 @@ class Dataset:
 		io_fields = util.load_json(self._info['io_name'], fdir=default.io_dir)
 		self.inp_fields = io_fields['inputs']
 		self.tar_fields = io_fields['outputs']
+		self.inp_post = io_fields['input_postprocess'] if 'input_postprocess' in io_fields else None
+		self.tar_post = io_fields['output_postprocess'] if 'output_postprocess' in io_fields else None
 		# Averaging
 		if self._info['avg_func'] == 'mean':
 			self.avg_func = util.elo_mean
@@ -45,6 +47,7 @@ class Dataset:
 			assert False, "Unrecognized normalizing function!"
 		# Build
 		self._build_train_games()
+		self._postprocess_games()
 		self._set_games_data()
 		self._set_full_dataset()
 		self._partition_dataset()
@@ -75,6 +78,29 @@ class Dataset:
 			print t.tid
 			self._train_games.extend(t.get_training_data(self, teams_dict, use_schedule=False))
 			self._train_games.extend(t.get_training_data(self, teams_dict, use_schedule=True))
+
+	def _postprocess_games(self):
+		for game in self._train_games:
+			game['inp'] = self._postprocess_arr(self.inp_post, game['inp'][0,:])
+			game['tar'] = self._postprocess_arr(self.tar_post, game['tar'][0,:])
+
+	def _postprocess_arr(self, post_arr, orig_arr):
+		if not post_arr:
+			return orig_arr
+		new_arr = np.zeros([1, len(post_arr)])
+		for i, post in enumerate(post_arr):
+			eval_str = self._gen_eval_str_from_post(orig_arr, post)
+			new_arr[0,i] = eval(eval_str)
+		return new_arr
+
+	def _gen_eval_str_from_post(self, arr, post):
+		s = ''
+		for p in post:
+			try:
+				s += p
+			except TypeError:
+				s += str(arr[p])
+		return s
 
 	def _set_games_data(self):
 		self.games_data = {}
