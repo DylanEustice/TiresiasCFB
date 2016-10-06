@@ -79,13 +79,15 @@ def load_team_DataFrame(team_id, dir=default.comp_team_dir):
 	return pd.read_pickle(os.path.join(path_to_data, fname))
 
 
-def standardize_data(data, std=None, mean=None):
+def standardize_data(data, params=dict([('std',None), ('mean',None)])):
 	"""
 	Standardize numpy array data using formula:
 		x_out = (x - x_mean) / x_std
 	Assumes data is M x N where M is the observations and
 	N is the data type.
 	"""
+	std = params['std']
+	mean = params['mean']
 	if std is None:
 		std = data.std(axis=0)
 	if mean is None:
@@ -94,13 +96,15 @@ def standardize_data(data, std=None, mean=None):
 	return np.divide(data - mean, std), norm_params
 
 
-def normalize_data(data, min_=None, max_=None):
+def normalize_data(data, params=dict([('min_',None), ('max_',None)])):
 	"""
 	Normalize numpy array data using formula:
 		x_out = (x - x_min) / x_max
 	Assumes data is M x N where M is the observations and
 	N is the data type.
 	"""
+	min_ = params['min_']
+	max_ = params['max_']
 	if min_ is None:
 		min_ = data.min(axis=0)
 	if max_ is None:
