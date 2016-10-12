@@ -159,7 +159,7 @@ class Team:
 				tar_data = build_data_from_games(g, dataset.tar_fields) if not use_schedule else place_holder_tar
 				if tar_data.shape[0] > 1:
 					tar_data = tar_data.reshape(1,tar_data.shape[0])
-				this_game = dict([('inp',inp_data), ('tar',tar_data), ('id',float(g['Id']))])
+				this_game = dict([('inp',inp_data), ('tar',tar_data), ('id',float(g['Id'])), ('date',g['DateUtc'])])
 				games.append(this_game)
 		return games
 

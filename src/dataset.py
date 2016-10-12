@@ -22,6 +22,7 @@ class Dataset:
 		self.home_only = self._info['home_only']
 		self.date_diff = datetime.timedelta(weeks=self._info['date_diff'])
 		self.train_pct = self._info['train_pct']
+		self.max_train_date = datetime.datetime(*self._info['max_train_date'])
 		# Games / teams
 		self._games = util.load_all_dataFrame()
 		self._teams = build_all_teams(all_data=self._games)
@@ -46,7 +47,7 @@ class Dataset:
 		else:
 			assert False, "Unrecognized normalizing function!"
 		# Build
-		self._build_train_games()
+		self._build_raw_games()
 		self._postprocess_games()
 		self._set_games_data()
 		self._set_full_dataset()
@@ -70,17 +71,17 @@ class Dataset:
 	def _axis_isnan(self, A):
 		return np.any(np.isnan(A), axis=1)
 
-	def _build_train_games(self):
+	def _build_raw_games(self):
 	# Extract game training data
-		self._train_games = []
+		self._raw_games = []
 		teams_dict = dict([(t.tid, t) for t in self._teams])
 		for t in self._teams:
 			print t.tid
-			self._train_games.extend(t.get_training_data(self, teams_dict, use_schedule=False))
-			self._train_games.extend(t.get_training_data(self, teams_dict, use_schedule=True))
+			self._raw_games.extend(t.get_training_data(self, teams_dict, use_schedule=False))
+			self._raw_games.extend(t.get_training_data(self, teams_dict, use_schedule=True))
 
 	def _postprocess_games(self):
-		for game in self._train_games:
+		for game in self._raw_games:
 			game['inp'] = self._postprocess_arr(self.inp_post, game['inp'][0,:])
 			game['tar'] = self._postprocess_arr(self.tar_post, game['tar'][0,:])
 
@@ -105,14 +106,16 @@ class Dataset:
 	def _set_games_data(self):
 		self.games_data = {}
 		game_to_dict = lambda g: dict([('inp', g['inp']), ('tar', g['tar'])])
-		for g in self._train_games:
+		for g in self._raw_games:
 			self.games_data[g['id']] = game_to_dict(g)
 
 	def _set_full_dataset(self):
-		self.all_raw_inp = np.vstack([g['inp'] for g in self._train_games]).astype('double')
-		self.all_raw_tar = np.vstack([g['tar'] for g in self._train_games]).astype('double')
+		self.all_raw_inp = np.vstack([g['inp'] for g in self._raw_games]).astype('double')
+		self.all_raw_tar = np.vstack([g['tar'] for g in self._raw_games]).astype('double')
+		dates = np.array([g['date'] for g in self._raw_games])
 		not_or = lambda A, B: np.logical_not(np.logical_or(A, B))
 		ixValid = not_or(self._axis_isnan(self.all_raw_inp), self._axis_isnan(self.all_raw_tar))
+		ixValid = np.logical_and)=(ixValid, dates < self.max_train_date)
 		_, self.inp_norm_params = self._norm_func(self.all_raw_inp[ixValid,:])
 		self.all_norm_inp, _ = self._norm_func(self.all_raw_inp, params=self.inp_norm_params)
 		_, self.tar_norm_params = self._norm_func(self.all_raw_tar[ixValid,:])
@@ -120,11 +123,11 @@ class Dataset:
 
 	def _partition_dataset(self):
 		# Get partition indeces
-		gids = np.unique([g['id'] for g in self._train_games])
+		gids = np.unique([g['id'] for g in self._raw_games])
 		rnd_vec = np.random.random(gids.shape[0])
 		train_idx = rnd_vec < self.train_pct
 		train_gids = {id_ for i, id_ in enumerate(gids) if train_idx[i]}
-		ixTrain = np.array([g['id'] in train_gids for g in self._train_games])
+		ixTrain = np.array([g['id'] in train_gids for g in self._raw_games])
 		ixTest = np.logical_not(ixTrain)
 		# Partition train data
 		self.train_norm_inp = self.all_norm_inp[ixTrain,:]
