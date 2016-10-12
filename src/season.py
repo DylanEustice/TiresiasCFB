@@ -17,15 +17,17 @@ class Season:
 		"""
 		# Season info
 		self._year = year
+		self._year_dir = os.path.join('data', str(self._year))
 		self._teams = build_all_teams(years=range(2005, year+1))
 		self._schedule = util.load_schedule(year=year)
-		self._lines = util.load_json('lines.json', fdir=os.path.join('data', str(default.this_year)))
+		self._lines = util.load_json('lines.json', fdir=self._year_dir)
 		self._sim_type = sim_type
 		# Data
 		self._dataset = dataset
 		all_data = util.load_all_dataFrame()
 		self._games = all_data[all_data['Season'] == self._year]
 
+		self._name =  self._dataset.name + '_' + self._sim_type
 		if self._sim_type == 'pure_elo':
 			self._scores = False
 		else:
@@ -36,15 +38,16 @@ class Season:
 		return self._teams
 
 	def _predictions_name(self, week):
-		return'Predictions_Week{}_{}_{}.json'.format(week, self._sim_type, self._dataset.name)
+		path = os.path.join('Predictions', 'Week_'+str(int(week)), self._name)
+		util.ensure_path(os.path.join(self._year_dir, path))
+		return os.path.join(path, 'Predictions.json')
 
 	def save_week_predictions(self, week):
 		"""
 		"""
 		results = self.sim_week(week)
 		fname = self._predictions_name(week)
-		fdir = os.path.join('data', str(self._year))
-		util.dump_json(results, fname, fdir=fdir)
+		util.dump_json(results, fname, fdir=self._year_dir)
 
 	def sim_week(self, week):
 		"""
@@ -100,11 +103,10 @@ class Season:
 		if predictions is None:
 			predictions = {}
 			if not isinstance(weeks, list):
-				weeks = list(weeks)
+				weeks = [weeks]
 			for week in weeks:
 				fname = self._predictions_name(week)
-				fdir = os.path.join('data', str(self._year))
-				new_predictions = util.load_json(fname, fdir=fdir)
+				new_predictions = util.load_json(fname, fdir=self._year_dir)
 				for key, data in new_predictions.iteritems():
 					predictions[key] = data
 		predicted_gids = [int(gid) for gid in predictions.keys()]
@@ -208,9 +210,6 @@ class Season:
 		"""
 		if self._sim_type == 'lin_regress':
 			raw_scores = np.array(self._dataset.games_data[float(gid)]['inp'] * self._dataset.B_raw)
-			# home_elos = home.get_current_elos(next_game_date=date)
-			# away_elos = away.get_current_elos(next_game_date=date)
-			# raw_scores = elo_lin_regress_sim(home_elos[:4], away_elos[:4], self._B)
 			scores = np.zeros(raw_scores[0,:].shape[0])
 			scores[0] = raw_scores[0,0] + 1.5
 			scores[1] = raw_scores[0,1] - 1.5
