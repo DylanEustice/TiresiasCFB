@@ -7,6 +7,8 @@ import numpy as np
 from dateutil import parser
 import pytz
 
+XTRA_WEEKS = datetime.timedelta(weeks=52)
+
 
 class Team:
 	def __init__(self, tid, name, games, schedule):
@@ -134,14 +136,18 @@ class Team:
 				this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff)
 				# From previous games, build data array
 				if this_prev_games.shape[0] < dataset.min_games:
-					continue
+					this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff+XTRA_WEEKS)
+					if this_prev_games.shape[0] < dataset.min_games:
+						continue
 				# Get data from other team
 				other_tid = g['other_TeamId']
 				other_team = teams_dict[other_tid]
 				other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff)
 				# Other team must also have enough games
 				if other_prev_games.shape[0] < dataset.min_games:
-					continue
+					other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff+XTRA_WEEKS)
+					if other_prev_games.shape[0] < dataset.min_games:
+						continue
 				# Build data
 				this_inp_data_all = build_data_from_games(this_prev_games, dataset.inp_fields)
 				this_inp_data = dataset.avg_func(this_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
