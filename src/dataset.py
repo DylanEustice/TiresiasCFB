@@ -13,7 +13,7 @@ class Dataset:
 		# Optionally load in parameters
 		if name is None:
 			return
-		self._name = name
+		self.name = name
 		self._info = util.load_json(name+'.json', fdir=name_dir)
 		# Params
 		self.min_date = datetime.datetime(*self._info['min_date'])
@@ -64,7 +64,7 @@ class Dataset:
 		return this
 
 	def save(self, fdir=default.data_dir):
-		with open(os.path.join(fdir, self._name+'.ds'),"w") as f:
+		with open(os.path.join(fdir, self.name+'.ds'),"w") as f:
 			pickle.dump(self, f)
 
 	def _axis_isnan(self, A):
@@ -143,8 +143,10 @@ class Dataset:
 		ixNormNaN = np.logical_or(self._axis_isnan(self.train_norm_inp),
 								  self._axis_isnan(self.train_norm_tar))
 		ixValid = np.logical_not(np.logical_or(ixRawNaN, ixNormNaN))
-		self.B_raw = util.linear_regression(self.train_raw_inp[ixValid,:], self.train_raw_tar[ixValid,:])
-		self.B_norm = util.linear_regression(self.train_norm_inp[ixValid,:], self.train_norm_tar[ixValid,:])
+		self.B_raw,_,_,_ = np.linalg.lstsq(self.train_raw_inp[ixValid,:], self.train_raw_tar[ixValid,:])
+		self.B_raw = np.matrix(self.B_raw)
+		self.B_norm,_,_,_ = np.linalg.lstsq(self.train_norm_inp[ixValid,:], self.train_norm_tar[ixValid,:])
+		self.B_norm = np.matrix(self.B_norm)
 
 	def print_date_range(self):
 		print "{} to {}".format(self._min_date, self._max_date)
