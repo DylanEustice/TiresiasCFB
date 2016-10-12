@@ -35,11 +35,14 @@ class Season:
 	def teams(self):
 		return self._teams
 
+	def _predictions_name(self, week):
+		return'Predictions_Week{}_{}_{}.json'.format(week, self._sim_type, self._dataset.name)
+
 	def save_week_predictions(self, week):
 		"""
 		"""
 		results = self.sim_week(week)
-		fname = 'Predictions_Week{}_{}.json'.format(week, self._sim_type)
+		fname = self._predictions_name(week)
 		fdir = os.path.join('data', str(self._year))
 		util.dump_json(results, fname, fdir=fdir)
 
@@ -90,14 +93,20 @@ class Season:
 				results[gid]['Home_Pr'] = scores
 		return results
 
-	def week_sim_acc(self, week, predictions=None):
+	def week_sim_acc(self, weeks, predictions=None):
 		"""
 		"""
 		# Load predictions
 		if predictions is None:
-			fname = 'Predictions_Week{}_{}.json'.format(week, self._sim_type)
-			fdir = os.path.join('data', str(self._year))
-			predictions = util.load_json(fname, fdir=fdir)
+			predictions = {}
+			if not isinstance(weeks, list):
+				weeks = list(weeks)
+			for week in weeks:
+				fname = self._predictions_name(week)
+				fdir = os.path.join('data', str(self._year))
+				new_predictions = util.load_json(fname, fdir=fdir)
+				for key, data in new_predictions.iteritems():
+					predictions[key] = data
 		predicted_gids = [int(gid) for gid in predictions.keys()]
 		# Load results
 		results_gids = np.unique(self._games['Id'])
@@ -148,6 +157,7 @@ class Season:
 		if self._scores:
 			pred = results['pred_score'][:,0] > results['pred_score'][:,1]
 			act = results['act_score'][:,0] > results['act_score'][:,1]
+			diff = np.diff(results['act_score']) - np.diff(results['pred_score'])
 			corr_game = pred == act
 			# Spread
 			ixNumSpread = np.logical_not(np.isnan(results['pred_diff_adj']))
@@ -162,15 +172,15 @@ class Season:
 			# Bias
 			bias_home = np.mean(results['act_score'][:,0] - results['pred_score'][:,0])
 			bias_away = np.mean(results['act_score'][:,1] - results['pred_score'][:,1])
-			bias = np.mean(results['act_score'] - results['pred_score'])
+			bias = np.mean(diff)
 			# Abs error
 			abserr_home = np.mean(np.abs(results['act_score'][:,0] - results['pred_score'][:,0]))
 			abserr_away = np.mean(np.abs(results['act_score'][:,1] - results['pred_score'][:,1]))
-			abserr = np.mean(np.abs(results['act_score'] - results['pred_score']))
+			abserr = np.mean(np.abs(diff))
 			# MSE
 			mse_home = np.mean(np.power(results['act_score'][:,0] - results['pred_score'][:,0],2))
 			mse_away = np.mean(np.power(results['act_score'][:,1] - results['pred_score'][:,1],2))
-			mse = np.mean(np.power(results['act_score'] - results['pred_score'],2))
+			mse = np.mean(np.power(diff,2))
 			# Print
 			nGame = len(corr_game)
 			nSpread = sum(ixNumSpread)
