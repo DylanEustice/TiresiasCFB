@@ -211,8 +211,8 @@ class Season:
 		if self._sim_type == 'lin_regress':
 			raw_scores = np.array(self._dataset.games_data[float(gid)]['inp'] * self._dataset.B_raw)
 			scores = np.zeros(raw_scores[0,:].shape[0])
-			scores[0] = raw_scores[0,0] + 1.5
-			scores[1] = raw_scores[0,1] - 1.5
+			scores[0] = raw_scores[0,0]
+			scores[1] = raw_scores[0,1]
 			return scores
 		elif self._sim_type == 'pure_elo':
 			home_elo = home.get_current_elos(next_game_date=date)[0]
