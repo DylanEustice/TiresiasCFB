@@ -7,8 +7,6 @@ import numpy as np
 from dateutil import parser
 import pytz
 
-XTRA_WEEKS = datetime.timedelta(weeks=52)
-
 
 class Team:
 	def __init__(self, tid, name, games, schedule):
@@ -136,7 +134,7 @@ class Team:
 				this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff)
 				# From previous games, build data array
 				if this_prev_games.shape[0] < dataset.min_games:
-					this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff+XTRA_WEEKS)
+					this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff+default.extra_build_weeks)
 					if this_prev_games.shape[0] < dataset.min_games:
 						continue
 				# Get data from other team
@@ -145,7 +143,7 @@ class Team:
 				other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff)
 				# Other team must also have enough games
 				if other_prev_games.shape[0] < dataset.min_games:
-					other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff+XTRA_WEEKS)
+					other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff+default.extra_build_weeks)
 					if other_prev_games.shape[0] < dataset.min_games:
 						continue
 				# Build data

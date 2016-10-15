@@ -13,6 +13,8 @@ season_day_sep = 100
 this_year = 2016
 arch_data_years = range(2005, 2013)
 
+extra_build_weeks = datetime.timedelta(weeks=52)
+
 avg_score = 26.9
 avg_rushing = 160.3
 avg_passing = 225.7
