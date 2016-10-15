@@ -91,7 +91,10 @@ class Dataset:
 		new_arr = np.zeros([1, len(post_arr)])
 		for i, post in enumerate(post_arr):
 			eval_str = self._gen_eval_str_from_post(orig_arr, post)
-			new_arr[0,i] = eval(eval_str)
+			try:
+				new_arr[0,i] = eval(eval_str)
+			except NameError:
+				new_arr[0,i] = np.nan
 		return new_arr
 
 	def _gen_eval_str_from_post(self, arr, post):
@@ -110,24 +113,30 @@ class Dataset:
 			self.games_data[g['id']] = game_to_dict(g)
 
 	def _set_full_dataset(self):
+		# Build up data
 		self.all_raw_inp = np.vstack([g['inp'] for g in self._raw_games]).astype('double')
 		self.all_raw_tar = np.vstack([g['tar'] for g in self._raw_games]).astype('double')
+		self._valid_gids = np.unique([g['id'] for g in self._raw_games])
+		# Exclude games after specified date or with NaNs
 		dates = np.array([g['date'] for g in self._raw_games])
 		not_or = lambda A, B: np.logical_not(np.logical_or(A, B))
 		ixValid = not_or(self._axis_isnan(self.all_raw_inp), self._axis_isnan(self.all_raw_tar))
-		ixValid = np.logical_and)=(ixValid, dates < self.max_train_date)
-		_, self.inp_norm_params = self._norm_func(self.all_raw_inp[ixValid,:])
+		ixValid = np.logical_and(ixValid, dates < self.max_train_date)
+		self.all_raw_inp = self.all_raw_inp[ixValid,:]
+		self.all_raw_tar = self.all_raw_tar[ixValid,:]
+		self._valid_gids = self._valid_gids[ixValid]
+		# Get normalized data
+		_, self.inp_norm_params = self._norm_func(self.all_raw_inp)
 		self.all_norm_inp, _ = self._norm_func(self.all_raw_inp, params=self.inp_norm_params)
-		_, self.tar_norm_params = self._norm_func(self.all_raw_tar[ixValid,:])
+		_, self.tar_norm_params = self._norm_func(self.all_raw_tar)
 		self.all_norm_tar, _ = self._norm_func(self.all_raw_tar, params=self.tar_norm_params)
 
 	def _partition_dataset(self):
 		# Get partition indeces
-		gids = np.unique([g['id'] for g in self._raw_games])
-		rnd_vec = np.random.random(gids.shape[0])
+		rnd_vec = np.random.random(self._valid_gids.shape[0])
 		train_idx = rnd_vec < self.train_pct
-		train_gids = {id_ for i, id_ in enumerate(gids) if train_idx[i]}
-		ixTrain = np.array([g['id'] in train_gids for g in self._raw_games])
+		train_gids = {id_ for i, id_ in enumerate(self._valid_gids) if train_idx[i]}
+		ixTrain = np.array([gid in train_gids for gid in self._valid_gids])
 		ixTest = np.logical_not(ixTrain)
 		# Partition train data
 		self.train_norm_inp = self.all_norm_inp[ixTrain,:]
