@@ -130,22 +130,15 @@ class Team:
 				# Don't use game if other team is FCS
 				if g['other_TeamId'] not in teams_dict:
 					continue
-				# Get games within a certain previous range
-				this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff)
-				# From previous games, build data array
-				if this_prev_games.shape[0] < dataset.min_games:
-					this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff+default.extra_build_weeks)
-					if this_prev_games.shape[0] < dataset.min_games:
-						continue
 				# Get data from other team
 				other_tid = g['other_TeamId']
 				other_team = teams_dict[other_tid]
-				other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff)
-				# Other team must also have enough games
-				if other_prev_games.shape[0] < dataset.min_games:
-					other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff+default.extra_build_weeks)
-					if other_prev_games.shape[0] < dataset.min_games:
-						continue
+				# Get games within a certain previous range
+				this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff, dataset.min_games)
+				other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff, dataset.min_games)
+				# Must have enough games
+				if this_prev_games.shape[0] < dataset.min_games or other_prev_games.shape[0] < dataset.min_games:
+					continue
 				# Build data
 				this_inp_data_all = build_data_from_games(this_prev_games, dataset.inp_fields)
 				this_inp_data = dataset.avg_func(this_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
@@ -172,7 +165,7 @@ def build_data_from_games(games, fields):
 	return data
 
 
-def get_games_in_range(games, curr_date, max_diff):
+def get_games_in_range(games, curr_date, max_diff, min_games=None):
 	"""
 	Get games within a certain previous range
 	"""
@@ -180,7 +173,10 @@ def get_games_in_range(games, curr_date, max_diff):
 	prior_games = date_diff > datetime.timedelta(0)
 	recent_games = date_diff < max_diff
 	valid_dates = np.logical_and(prior_games, recent_games)
-	return games[valid_dates]
+	games = games[valid_dates]
+	if min_games is not None and games.shape[0] < min_games:
+		games = get_games_in_range(games, curr_date, max_diff+default.extra_build_weeks)
+	return games
 
 
 def build_all_teams(years=range(2005,default.this_year+1), all_data=None):
