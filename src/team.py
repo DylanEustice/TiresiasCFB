@@ -155,6 +155,25 @@ class Team:
 		return games
 
 
+def setup_game_input(teams, curr_date, dataset):
+	"""
+	"""
+	# Build previous games
+	home_prev_games = get_games_in_range(teams[0].games, curr_date, dataset.date_diff)
+	away_prev_games = get_games_in_range(teams[1].games, curr_date, dataset.date_diff)
+	if home_prev_games.shape[0] < dataset.min_games or away_prev_games.shape[0] < dataset.min_games:
+		return None
+	# Build data
+	home_inp_data_all = build_data_from_games(home_prev_games, dataset.inp_fields)
+	home_inp_data = dataset.avg_func(home_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
+	away_inp_data_all = build_data_from_games(away_prev_games, dataset.inp_fields)
+	away_inp_data = dataset.avg_func(away_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
+	if not (home_inp_data.shape[0] and away_inp_data.shape[0]):
+		return None
+	inp_data = np.hstack([home_inp_data, away_inp_data])
+	return inp_data
+
+
 def build_data_from_games(games, fields):
 	"""
 	"""
