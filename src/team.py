@@ -192,10 +192,10 @@ def get_games_in_range(games, curr_date, max_diff, min_games=None):
 	prior_games = date_diff > datetime.timedelta(0)
 	recent_games = date_diff < max_diff
 	valid_dates = np.logical_and(prior_games, recent_games)
-	games = games[valid_dates]
-	if min_games is not None and games.shape[0] < min_games:
-		games = get_games_in_range(games, curr_date, max_diff+default.extra_build_weeks)
-	return games
+	new_games = games[valid_dates]
+	if min_games is not None and new_games.shape[0] < min_games:
+		new_games = get_games_in_range(games, curr_date, max_diff+default.extra_build_weeks)
+	return new_games
 
 
 def build_all_teams(years=range(2005,default.this_year+1), all_data=None):
