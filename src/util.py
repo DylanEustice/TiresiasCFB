@@ -96,7 +96,7 @@ def standardize_data(data, params=dict([('std',None), ('mean',None)])):
 	return np.divide(data - mean, std), norm_params
 
 
-def normalize_data(data, params=dict([('min_',None), ('max_',None)])):
+def normalize_data(data, params=dict([('min_',None), ('max_',None)]), do_norm=True):
 	"""
 	Normalize numpy array data using formula:
 		x_out = (x - x_min) / x_max
@@ -110,7 +110,11 @@ def normalize_data(data, params=dict([('min_',None), ('max_',None)])):
 	if max_ is None:
 		max_ = data.max(axis=0)
 	norm_params = dict([('min_',min_), ('max_',max_)])
-	return np.divide(data - min_, max_), norm_params
+	if do_norm:
+		out = np.divide(data - min_, max_), norm_params
+	else:
+		out = np.multiply(data, max_) + min_, norm_params
+	return out
 
 
 def moving_avg(data, n=10):
@@ -158,7 +162,7 @@ def linear_regression(X, y):
 	return (X.T * X)**-1 * X.T * y
 
 
-def elo_mean(x, fields, elo_fields=default.all_elo_fields):
+def elo_mean(x, fields, elo_fields=default.this_elo_fields):
 	"""
 	Preforms a mean on a data series, but using the last indexed
 	elo value instead of averaging
