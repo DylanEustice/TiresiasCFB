@@ -1,12 +1,13 @@
 import os
+import datetime
 
 schedule_columns = ['Id', 'this_TeamId', 'other_TeamId', 'DateUtc', 'Season',
 					'Week', 'Spread', 'OverUnder', 'is_home']
 
-this_elo_fields = ['this_wl_elo', 'this_cf_elo', 'this_off_elo', 'this_def_elo', 
-				   'this_poff_elo', 'this_roff_elo', 'this_pdef_elo', 'this_rdef_elo']
-other_elo_fields = ['other_wl_elo', 'other_cf_elo', 'other_off_elo', 'other_def_elo',
-					'other_poff_elo', 'other_roff_elo', 'other_pdef_elo', 'other_rdef_elo']
+this_elo_fields = ['this_wl_elo', 'this_off_elo', 'this_def_elo', 'this_cf_elo',
+				   'this_poff_elo', 'this_pdef_elo', 'this_roff_elo', 'this_rdef_elo']
+other_elo_fields = ['other_wl_elo', 'other_off_elo', 'other_def_elo', 'other_cf_elo',
+					'other_poff_elo', 'other_pdef_elo', 'other_roff_elo', 'other_rdef_elo']
 all_elo_fields = this_elo_fields + other_elo_fields
 
 season_day_sep = 100
