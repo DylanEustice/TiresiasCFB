@@ -134,19 +134,7 @@ class Team:
 				other_tid = g['other_TeamId']
 				other_team = teams_dict[other_tid]
 				# Get games within a certain previous range
-				this_prev_games = get_games_in_range(self.games, g['DateUtc'], dataset.date_diff, dataset.min_games)
-				other_prev_games = get_games_in_range(other_team.games, g['DateUtc'], dataset.date_diff, dataset.min_games)
-				# Must have enough games
-				if this_prev_games.shape[0] < dataset.min_games or other_prev_games.shape[0] < dataset.min_games:
-					continue
-				# Build data
-				this_inp_data_all = build_data_from_games(this_prev_games, dataset.inp_fields)
-				this_inp_data = dataset.avg_func(this_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
-				other_inp_data_all = build_data_from_games(other_prev_games, dataset.inp_fields)
-				other_inp_data = dataset.avg_func(other_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
-				if not (this_inp_data.shape[0] and other_inp_data.shape[0]):
-					continue
-				inp_data = np.hstack([this_inp_data, other_inp_data])
+				inp_data = setup_game_input([this, other_team], g['DateUtc'], dataset)
 				tar_data = build_data_from_games(g, dataset.tar_fields) if not use_schedule else place_holder_tar
 				if tar_data.shape[0] > 1:
 					tar_data = tar_data.reshape(1,tar_data.shape[0])
@@ -165,8 +153,8 @@ def setup_game_input(teams, curr_date, dataset):
 		return None
 	# Build data
 	home_inp_data_all = build_data_from_games(home_prev_games, dataset.inp_fields)
-	home_inp_data = dataset.avg_func(home_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
 	away_inp_data_all = build_data_from_games(away_prev_games, dataset.inp_fields)
+	home_inp_data = dataset.avg_func(home_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
 	away_inp_data = dataset.avg_func(away_inp_data_all, *dataset.avg_func_args, **dataset.avg_func_kwargs)
 	if not (home_inp_data.shape[0] and away_inp_data.shape[0]):
 		return None
