@@ -11,9 +11,9 @@ from src.eloCruncher import Pr_elo
 
 class Season:
 
-	def __init__(self, dataset, year=default.this_year, sim_type='lin_regress'):
+	def __init__(self, dataset, year=default.this_year, sim_type='raw_lin_regress'):
 		"""
-		sim_type: lin_regress
+		sim_type: raw_lin_regress, norm_lin_regress, pure_elo
 		"""
 		# Season info
 		self._year = year
@@ -26,8 +26,10 @@ class Season:
 		self._dataset = dataset
 		all_data = util.load_all_dataFrame()
 		self._games = all_data[all_data['Season'] == self._year]
-
-		self._name =  self._dataset.name + '_' + self._sim_type
+		if self._dataset is not None:
+			self._name = self._dataset.name + '_' + self._sim_type
+		else:
+			self._name = self._sim_type
 		if self._sim_type == 'pure_elo':
 			self._scores = False
 		else:
@@ -65,14 +67,14 @@ class Season:
 			try:
 				prev_date = date - datetime.timedelta(days=1)
 				home = self._teams[self._teams.index(int(home_tid))]
-				home.elos = home.set_elos_to_date(prev_date)
 				away = self._teams[self._teams.index(int(away_tid))]
-				away.elos = away.set_elos_to_date(prev_date)
+				home.set_elos_to_date(prev_date)
+				away.set_elos_to_date(prev_date)
 			except ValueError:
 				# Eiher team not in valid teams
 				del results[gid]
 				continue
-			scores = self._sim_game(gid)
+			scores = self._sim_game(gid, home, away)
 			# Set data
 			results[gid]['DateUtc'] = str(date)
 			results[gid]['Home_TeamId'] = home_tid
@@ -205,22 +207,22 @@ class Season:
 			print "Straight Up: {:2f} ({} and {})".format(100*np.mean(corr_game),
 				sum(corr_game), nGame-sum(corr_game))
 
-	def _sim_game(self, gid):
+	def _sim_game(self, gid, home, away):
 		"""
 		"""
-		if self._sim_type == 'lin_regress':
-			raw_scores = np.array(self._dataset.games_data[float(gid)]['inp'] * self._dataset.B_raw)
-			scores = np.zeros(raw_scores[0,:].shape[0])
-			scores[0] = raw_scores[0,0]
-			scores[1] = raw_scores[0,1]
+		if self._sim_type == 'norm_lin_regress':
+			inp = self._dataset.games_data[float(gid)]['norm_inp']
+			B = self._dataset.B_norm
+			scores = np.array(inp * B)[0]
+			scores,_ = self._dataset._norm_func(scores, params=self._dataset.tar_norm_params, do_norm=False)
+			return scores
+		if self._sim_type == 'raw_lin_regress':
+			inp = self._dataset.games_data[float(gid)]['raw_inp']
+			B = self._dataset.B_raw
+			scores = np.array(inp * B)[0]
 			return scores
 		elif self._sim_type == 'pure_elo':
-			home_elo = home.get_current_elos(next_game_date=date)[0]
-			away_elo = away.get_current_elos(next_game_date=date)[0]
-			return Pr_elo(home_elo - away_elo)
-
-
-def elo_lin_regress_sim(team0_elos, team1_elos, B):
-	elos = np.hstack([team0_elos, team1_elos])
-	scores = np.array(np.matrix(elos) * B)[0]
-	return scores
+			try:
+				return Pr_elo(home.elos[0] - away.elos[0])
+			except:
+				import pdb; pdb.set_trace()

@@ -1,6 +1,6 @@
 import src.default_parameters as default
 import src.util as util
-from src.team import build_all_teams
+from src.team import build_all_teams, build_data_from_games
 import numpy as np
 import pandas as pd
 import datetime
@@ -32,6 +32,7 @@ class Dataset:
 		self.tar_fields = io_fields['outputs']
 		self.inp_post = io_fields['input_postprocess'] if 'input_postprocess' in io_fields else None
 		self.tar_post = io_fields['output_postprocess'] if 'output_postprocess' in io_fields else None
+		self.inp_weight = io_fields['input_weight'] if 'input_weight' in io_fields else None
 		# Averaging
 		if self._info['avg_func'] == 'mean':
 			self.avg_func = util.elo_mean
@@ -47,6 +48,7 @@ class Dataset:
 		else:
 			assert False, "Unrecognized normalizing function!"
 		# Build
+		self._get_norm_params()
 		self._build_raw_games()
 		self._postprocess_games()
 		self._set_games_data()
@@ -70,6 +72,29 @@ class Dataset:
 
 	def _axis_isnan(self, A):
 		return np.any(np.isnan(A), axis=1)
+
+	def _get_norm_params(self):
+		print "Getting normalization params..."
+		# Get processed input
+		all_inp_raw = build_data_from_games(self._games, self.inp_fields)
+		all_inp_raw = np.hstack([all_inp_raw, all_inp_raw])
+		if self.inp_post:
+			all_inp = np.zeros([all_inp_raw.shape[0], len(self.inp_post)])
+			for i in range(0,all_inp.shape[0]):
+				all_inp[i,:] = self._postprocess_arr(self.inp_post, all_inp_raw[i,:])
+		else:
+			all_inp = all_inp_raw
+		# Get processed output
+		all_tar_raw = build_data_from_games(self._games, self.tar_fields)
+		if self.tar_post:
+			all_tar = np.zeros([all_tar_raw.shape[0], len(self.tar_post)])
+			for i in range(0,all_tar.shape[0]):
+				all_tar[i,:] = self._postprocess_arr(self.tar_post, all_tar_raw[i,:])
+		else:
+			all_tar = all_tar_raw
+		# Find normalization parameters
+		_, self.inp_norm_params = self._norm_func(all_inp)
+		_, self.tar_norm_params = self._norm_func(all_tar)
 
 	def _build_raw_games(self):
 	# Extract game training data
@@ -108,9 +133,12 @@ class Dataset:
 
 	def _set_games_data(self):
 		self.games_data = {}
-		game_to_dict = lambda g: dict([('inp', g['inp']), ('tar', g['tar'])])
 		for g in self._raw_games:
-			self.games_data[g['id']] = game_to_dict(g)
+			self.games_data[g['id']] = {}
+			self.games_data[g['id']]['raw_inp'] = g['inp']
+			self.games_data[g['id']]['norm_inp'],_ = self._norm_func(g['inp'], params=self.inp_norm_params)
+			self.games_data[g['id']]['raw_tar'] = g['tar']
+			self.games_data[g['id']]['norm_tar'],_ = self._norm_func(g['tar'], params=self.tar_norm_params)
 
 	def _set_full_dataset(self):
 		# Build up data
@@ -126,9 +154,7 @@ class Dataset:
 		self.all_raw_tar = self.all_raw_tar[ixValid,:]
 		self._valid_gids = self._valid_gids[ixValid]
 		# Get normalized data
-		_, self.inp_norm_params = self._norm_func(self.all_raw_inp)
 		self.all_norm_inp, _ = self._norm_func(self.all_raw_inp, params=self.inp_norm_params)
-		_, self.tar_norm_params = self._norm_func(self.all_raw_tar)
 		self.all_norm_tar, _ = self._norm_func(self.all_raw_tar, params=self.tar_norm_params)
 
 	def _partition_dataset(self):
